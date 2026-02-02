@@ -117,9 +117,14 @@
                 </div>
             </div>
 
-            <button onclick="openMultiplayerModal()" class="w-full mt-6 bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition">
-                Multiplayer
-            </button>
+            <div class="mt-6 space-y-3">
+                <button onclick="startLocalGame()" class="w-full bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 shadow-lg shadow-green-100 transition">
+                    Play Offline (Local)
+                </button>
+                <button onclick="openMultiplayerModal()" class="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition">
+                    Online Multiplayer
+                </button>
+            </div>
             
             <p id="turn-indicator" class="mt-4 text-center font-bold py-2 rounded bg-blue-100 text-blue-800 uppercase text-xs tracking-widest">
                 Blue's Turn
@@ -185,6 +190,18 @@
                 boardState[p.r][p.c] = { val: p.v, player: p.r < 3 ? 2 : 1, isDama: false };
             });
             render();
+        }
+
+        function startLocalGame() {
+            if (unsubscribeMatch) unsubscribeMatch();
+            matchId = null;
+            myPlayerNum = null;
+            initBoard();
+            scores = { 1: 0, 2: 0 };
+            currentPlayer = 1;
+            render();
+            // Scroll to board for mobile users
+            document.getElementById('board').scrollIntoView({ behavior: 'smooth' });
         }
 
         function tryConnectFirebase() {
@@ -259,7 +276,9 @@
         }
 
         function handleCellClick(r, c) {
+            // If in multiplayer, ensure it's your turn. If local (matchId is null), anyone can click.
             if (matchId && currentPlayer !== myPlayerNum) return;
+            
             const piece = boardState[r][c];
             if (piece && piece.player === currentPlayer) {
                 selectedPiece = { r, c, ...piece };
@@ -328,10 +347,7 @@
         }
 
         window.hostGame = async function() {
-            if (!db) {
-                alert("Online play is unavailable on this host.");
-                return;
-            }
+            if (!db) return;
             const code = Math.floor(100000 + Math.random() * 900000).toString();
             matchId = code; myPlayerNum = 1;
             document.getElementById('mp-initial').classList.add('hidden');
@@ -344,10 +360,7 @@
         };
 
         window.joinGame = async function() {
-            if (!db) {
-                alert("Online play is unavailable on this host.");
-                return;
-            }
+            if (!db) return;
             const code = document.getElementById('join-code').value.trim();
             if (code.length !== 6) return;
             const ref = db.doc(`artifacts/${appId}/public/data/matches/${code}`);
@@ -376,7 +389,7 @@
         window.openMultiplayerModal = () => document.getElementById('multiplayer-modal').style.display = 'flex';
         window.closeModal = () => document.getElementById('multiplayer-modal').style.display = 'none';
         window.cancelMultiplayer = () => { if(unsubscribeMatch) unsubscribeMatch(); matchId = null; closeModal(); };
-        window.resetGame = () => { if(confirm("Reset the match?")) { initBoard(); if(matchId && db) syncOnline(); } };
+        window.resetGame = () => { if(confirm("Reset the match?")) { startLocalGame(); } };
     </script>
 </body>
 </html>
