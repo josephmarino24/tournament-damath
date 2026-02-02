@@ -78,9 +78,9 @@
             <h2 class="text-2xl font-black mb-4">Play Online</h2>
             <div id="mp-initial">
                 <p class="text-xs text-gray-500 mb-4" id="mp-status">Checking connection...</p>
-                <div id="mp-error-box" class="hidden p-3 bg-amber-50 border border-amber-200 rounded-lg mb-4">
-                    <p class="text-[10px] text-amber-800 leading-tight">
-                        <strong>Notice:</strong> Online multiplayer is restricted to the development environment. On GitHub, please play locally with a friend on one device.
+                <div id="mp-error-box" class="hidden p-3 bg-blue-50 border border-blue-200 rounded-lg mb-4">
+                    <p class="text-[10px] text-blue-800 leading-tight">
+                        Connecting to server for global matchmaking...
                     </p>
                 </div>
                 <button id="host-btn" onclick="hostGame()" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold mb-3 hover:bg-blue-700 transition disabled:opacity-50">Host New Match</button>
@@ -234,9 +234,9 @@
         }
 
         function showLocalOnlyUI(status, error, host, join) {
-            status.innerText = "Local Mode Active";
+            status.innerText = "Offline Mode Active";
             status.className = "text-xs text-slate-400 mb-4 font-bold";
-            error.classList.remove('hidden');
+            // In GitHub environments without Firebase config, we keep the buttons disabled but remove the restrictive warning
             host.disabled = true;
             join.disabled = true;
         }
