@@ -78,19 +78,15 @@
             <h2 class="text-2xl font-black mb-4">Play Online</h2>
             <div id="mp-initial">
                 <p class="text-xs text-gray-500 mb-4" id="mp-status">Checking connection...</p>
-                <div id="mp-error-box" class="hidden p-3 bg-blue-50 border border-blue-200 rounded-lg mb-4">
-                    <p class="text-[10px] text-blue-800 leading-tight">
-                        Connecting to server for global matchmaking...
-                    </p>
-                </div>
-                <button id="host-btn" onclick="hostGame()" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold mb-3 hover:bg-blue-700 transition">Host New Match</button>
+                
+                <button id="host-btn" onclick="hostGame()" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold mb-3 hover:bg-blue-700 transition disabled:opacity-50">Host New Match</button>
                 <div class="relative flex py-5 items-center">
                     <div class="flex-grow border-t border-gray-300"></div>
                     <span class="flex-shrink mx-4 text-gray-400 text-xs font-bold">OR</span>
                     <div class="flex-grow border-t border-gray-300"></div>
                 </div>
                 <input type="text" id="join-code" placeholder="Enter 6-digit code" class="w-full p-3 border rounded-xl mb-3 text-center font-mono text-xl tracking-widest" maxlength="6">
-                <button id="join-btn" onclick="joinGame()" class="w-full bg-slate-800 text-white py-3 rounded-xl font-bold hover:bg-slate-700 transition">Join Match</button>
+                <button id="join-btn" onclick="joinGame()" class="w-full bg-slate-800 text-white py-3 rounded-xl font-bold hover:bg-slate-700 transition disabled:opacity-50">Join Match</button>
             </div>
             <div id="mp-waiting" class="hidden text-center">
                 <p class="text-gray-500 mb-2">Match Code:</p>
@@ -149,7 +145,7 @@
 
     <script>
         // Global State
-        let db, auth, appId = 'damath-v1';
+        let db, auth, appId = typeof __app_id !== 'undefined' ? __app_id : 'damath-v1';
         let boardState = [];
         let currentPlayer = 1;
         let scores = { 1: 0, 2: 0 };
@@ -158,6 +154,7 @@
         let matchId = null;
         let myPlayerNum = null;
         let unsubscribeMatch = null;
+        let isOnline = false;
 
         const operators = [
             ['', '+', '', '-', '', 'x', '', '÷'],
@@ -200,48 +197,45 @@
             scores = { 1: 0, 2: 0 };
             currentPlayer = 1;
             render();
-            // Scroll to board for mobile users
             document.getElementById('board').scrollIntoView({ behavior: 'smooth' });
         }
 
-        function tryConnectFirebase() {
+        async function tryConnectFirebase() {
             const statusText = document.getElementById('mp-status');
-            const errorBox = document.getElementById('mp-error-box');
+            const hostBtn = document.getElementById('host-btn');
+            const joinBtn = document.getElementById('join-btn');
 
             if (typeof __firebase_config !== 'undefined') {
                 try {
                     const config = JSON.parse(__firebase_config);
-                    firebase.initializeApp(config);
+                    if (!firebase.apps.length) firebase.initializeApp(config);
                     auth = firebase.auth();
                     db = firebase.firestore();
                     
-                    statusText.innerText = "Online Services Ready";
-                    statusText.className = "text-xs text-green-600 mb-4 font-bold";
+                    statusText.innerText = "Authenticating...";
                     
-                    const signIn = async () => {
-                        try {
-                            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                                await auth.signInWithCustomToken(__initial_auth_token);
-                            } else {
-                                await auth.signInAnonymously();
-                            }
-                        } catch (err) {
-                            console.error("Auth error:", err);
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await auth.signInWithCustomToken(__initial_auth_token);
+                    } else {
+                        await auth.signInAnonymously();
+                    }
+
+                    auth.onAuthStateChanged((user) => {
+                        if (user) {
+                            isOnline = true;
+                            statusText.innerText = "Connected as Player " + user.uid.substring(0, 4);
+                            statusText.className = "text-xs text-green-600 mb-4 font-bold";
+                        } else {
+                            statusText.innerText = "Connecting...";
                         }
-                    };
-                    signIn();
+                    });
                 } catch (e) {
-                    showLocalOnlyUI(statusText, errorBox);
+                    console.error("Firebase Init Error:", e);
+                    statusText.innerText = "Offline Mode Active";
                 }
             } else {
-                showLocalOnlyUI(statusText, errorBox);
+                statusText.innerText = "Offline Mode Active";
             }
-        }
-
-        function showLocalOnlyUI(status, error) {
-            status.innerText = "Connection Unavailable";
-            status.className = "text-xs text-red-400 mb-4 font-bold";
-            error.classList.remove('hidden');
         }
 
         function render() {
@@ -339,6 +333,7 @@
 
         async function syncOnline() {
             if (!db || !auth.currentUser) return;
+            // Rule 1: Use strict artifact path
             const ref = db.doc(`artifacts/${appId}/public/data/matches/${matchId}`);
             await ref.update({
                 board: JSON.stringify(boardState),
@@ -349,13 +344,14 @@
         }
 
         window.hostGame = async function() {
-            if (!db || !auth.currentUser) return;
+            if (!isOnline) return alert("Waiting for server connection...");
             const code = Math.floor(100000 + Math.random() * 900000).toString();
             matchId = code; 
             myPlayerNum = 1;
             document.getElementById('mp-initial').classList.add('hidden');
             document.getElementById('mp-waiting').classList.remove('hidden');
             document.getElementById('display-code').innerText = code;
+            
             await db.doc(`artifacts/${appId}/public/data/matches/${code}`).set({
                 board: JSON.stringify(boardState), 
                 scores, 
@@ -367,12 +363,13 @@
         };
 
         window.joinGame = async function() {
-            if (!db || !auth.currentUser) return;
+            if (!isOnline) return alert("Waiting for server connection...");
             const code = document.getElementById('join-code').value.trim();
             if (code.length !== 6) return;
             const ref = db.doc(`artifacts/${appId}/public/data/matches/${code}`);
             const snap = await ref.get();
-            if (!snap.exists()) return alert("Match not found");
+            if (!snap.exists()) return alert("Match code not found. Try hosting a new one.");
+            
             await ref.update({ 
                 status: 'active',
                 guestId: auth.currentUser.uid
@@ -387,16 +384,20 @@
             unsubscribeMatch = db.doc(`artifacts/${appId}/public/data/matches/${code}`).onSnapshot(doc => {
                 const data = doc.data();
                 if (!data) return;
-                if (data.status === 'active') document.getElementById('multiplayer-modal').style.display = 'none';
                 
-                // Only update local state if it's the opponent's move data arriving
+                // Transition UI when opponent joins
+                if (data.status === 'active' && document.getElementById('multiplayer-modal').style.display === 'flex') {
+                    document.getElementById('multiplayer-modal').style.display = 'none';
+                }
+                
+                // Update local state if it's currently NOT our turn (meaning data came from opponent's move)
                 if (data.currentPlayer === myPlayerNum) {
                     boardState = JSON.parse(data.board);
                     scores = data.scores;
                     currentPlayer = data.currentPlayer;
                     render();
                 }
-            }, (err) => console.error("Snapshot error:", err));
+            }, (err) => console.error("Match error:", err));
         }
 
         window.openMultiplayerModal = () => document.getElementById('multiplayer-modal').style.display = 'flex';
