@@ -83,14 +83,14 @@
                         Connecting to server for global matchmaking...
                     </p>
                 </div>
-                <button id="host-btn" onclick="hostGame()" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold mb-3 hover:bg-blue-700 transition disabled:opacity-50">Host New Match</button>
+                <button id="host-btn" onclick="hostGame()" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold mb-3 hover:bg-blue-700 transition">Host New Match</button>
                 <div class="relative flex py-5 items-center">
                     <div class="flex-grow border-t border-gray-300"></div>
                     <span class="flex-shrink mx-4 text-gray-400 text-xs font-bold">OR</span>
                     <div class="flex-grow border-t border-gray-300"></div>
                 </div>
                 <input type="text" id="join-code" placeholder="Enter 6-digit code" class="w-full p-3 border rounded-xl mb-3 text-center font-mono text-xl tracking-widest" maxlength="6">
-                <button id="join-btn" onclick="joinGame()" class="w-full bg-slate-800 text-white py-3 rounded-xl font-bold hover:bg-slate-700 transition disabled:opacity-50">Join Match</button>
+                <button id="join-btn" onclick="joinGame()" class="w-full bg-slate-800 text-white py-3 rounded-xl font-bold hover:bg-slate-700 transition">Join Match</button>
             </div>
             <div id="mp-waiting" class="hidden text-center">
                 <p class="text-gray-500 mb-2">Match Code:</p>
@@ -207,8 +207,6 @@
         function tryConnectFirebase() {
             const statusText = document.getElementById('mp-status');
             const errorBox = document.getElementById('mp-error-box');
-            const hostBtn = document.getElementById('host-btn');
-            const joinBtn = document.getElementById('join-btn');
 
             if (typeof __firebase_config !== 'undefined') {
                 try {
@@ -220,25 +218,30 @@
                     statusText.innerText = "Online Services Ready";
                     statusText.className = "text-xs text-green-600 mb-4 font-bold";
                     
-                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                        auth.signInWithCustomToken(__initial_auth_token);
-                    } else {
-                        auth.signInAnonymously();
-                    }
+                    const signIn = async () => {
+                        try {
+                            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                                await auth.signInWithCustomToken(__initial_auth_token);
+                            } else {
+                                await auth.signInAnonymously();
+                            }
+                        } catch (err) {
+                            console.error("Auth error:", err);
+                        }
+                    };
+                    signIn();
                 } catch (e) {
-                    showLocalOnlyUI(statusText, errorBox, hostBtn, joinBtn);
+                    showLocalOnlyUI(statusText, errorBox);
                 }
             } else {
-                showLocalOnlyUI(statusText, errorBox, hostBtn, joinBtn);
+                showLocalOnlyUI(statusText, errorBox);
             }
         }
 
-        function showLocalOnlyUI(status, error, host, join) {
-            status.innerText = "Offline Mode Active";
-            status.className = "text-xs text-slate-400 mb-4 font-bold";
-            // In GitHub environments without Firebase config, we keep the buttons disabled but remove the restrictive warning
-            host.disabled = true;
-            join.disabled = true;
+        function showLocalOnlyUI(status, error) {
+            status.innerText = "Connection Unavailable";
+            status.className = "text-xs text-red-400 mb-4 font-bold";
+            error.classList.remove('hidden');
         }
 
         function render() {
@@ -276,7 +279,6 @@
         }
 
         function handleCellClick(r, c) {
-            // If in multiplayer, ensure it's your turn. If local (matchId is null), anyone can click.
             if (matchId && currentPlayer !== myPlayerNum) return;
             
             const piece = boardState[r][c];
@@ -336,7 +338,7 @@
         }
 
         async function syncOnline() {
-            if (!db) return;
+            if (!db || !auth.currentUser) return;
             const ref = db.doc(`artifacts/${appId}/public/data/matches/${matchId}`);
             await ref.update({
                 board: JSON.stringify(boardState),
@@ -347,27 +349,36 @@
         }
 
         window.hostGame = async function() {
-            if (!db) return;
+            if (!db || !auth.currentUser) return;
             const code = Math.floor(100000 + Math.random() * 900000).toString();
-            matchId = code; myPlayerNum = 1;
+            matchId = code; 
+            myPlayerNum = 1;
             document.getElementById('mp-initial').classList.add('hidden');
             document.getElementById('mp-waiting').classList.remove('hidden');
             document.getElementById('display-code').innerText = code;
             await db.doc(`artifacts/${appId}/public/data/matches/${code}`).set({
-                board: JSON.stringify(boardState), scores, currentPlayer, status: 'waiting'
+                board: JSON.stringify(boardState), 
+                scores, 
+                currentPlayer, 
+                status: 'waiting',
+                hostId: auth.currentUser.uid
             });
             listenToMatch(code);
         };
 
         window.joinGame = async function() {
-            if (!db) return;
+            if (!db || !auth.currentUser) return;
             const code = document.getElementById('join-code').value.trim();
             if (code.length !== 6) return;
             const ref = db.doc(`artifacts/${appId}/public/data/matches/${code}`);
             const snap = await ref.get();
             if (!snap.exists()) return alert("Match not found");
-            await ref.update({ status: 'active' });
-            matchId = code; myPlayerNum = 2;
+            await ref.update({ 
+                status: 'active',
+                guestId: auth.currentUser.uid
+            });
+            matchId = code; 
+            myPlayerNum = 2;
             listenToMatch(code);
         };
 
@@ -377,13 +388,15 @@
                 const data = doc.data();
                 if (!data) return;
                 if (data.status === 'active') document.getElementById('multiplayer-modal').style.display = 'none';
+                
+                // Only update local state if it's the opponent's move data arriving
                 if (data.currentPlayer === myPlayerNum) {
                     boardState = JSON.parse(data.board);
                     scores = data.scores;
                     currentPlayer = data.currentPlayer;
                     render();
                 }
-            });
+            }, (err) => console.error("Snapshot error:", err));
         }
 
         window.openMultiplayerModal = () => document.getElementById('multiplayer-modal').style.display = 'flex';
