@@ -77,16 +77,16 @@
         <div class="bg-white p-8 rounded-2xl shadow-2xl max-w-sm w-full mx-4">
             <h2 class="text-2xl font-black mb-4">Play Online</h2>
             <div id="mp-initial">
-                <p class="text-xs text-gray-500 mb-4" id="mp-status">Checking connection...</p>
+                <p class="text-xs text-gray-500 mb-4" id="mp-status">Connecting to server...</p>
                 
-                <button id="host-btn" onclick="hostGame()" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold mb-3 hover:bg-blue-700 transition disabled:opacity-50">Host New Match</button>
+                <button id="host-btn" onclick="hostGame()" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold mb-3 hover:bg-blue-700 transition">Host New Match</button>
                 <div class="relative flex py-5 items-center">
                     <div class="flex-grow border-t border-gray-300"></div>
                     <span class="flex-shrink mx-4 text-gray-400 text-xs font-bold">OR</span>
                     <div class="flex-grow border-t border-gray-300"></div>
                 </div>
                 <input type="text" id="join-code" placeholder="Enter 6-digit code" class="w-full p-3 border rounded-xl mb-3 text-center font-mono text-xl tracking-widest" maxlength="6">
-                <button id="join-btn" onclick="joinGame()" class="w-full bg-slate-800 text-white py-3 rounded-xl font-bold hover:bg-slate-700 transition disabled:opacity-50">Join Match</button>
+                <button id="join-btn" onclick="joinGame()" class="w-full bg-slate-800 text-white py-3 rounded-xl font-bold hover:bg-slate-700 transition">Join Match</button>
             </div>
             <div id="mp-waiting" class="hidden text-center">
                 <p class="text-gray-500 mb-2">Match Code:</p>
@@ -202,8 +202,6 @@
 
         async function tryConnectFirebase() {
             const statusText = document.getElementById('mp-status');
-            const hostBtn = document.getElementById('host-btn');
-            const joinBtn = document.getElementById('join-btn');
 
             if (typeof __firebase_config !== 'undefined') {
                 try {
@@ -212,10 +210,11 @@
                     auth = firebase.auth();
                     db = firebase.firestore();
                     
-                    statusText.innerText = "Authenticating...";
+                    statusText.innerText = "Authenticating with server...";
                     
+                    // Priority 1: Auth Token
                     if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                        await auth.signInWithCustomToken(__initial_auth_token);
+                        await auth.signInWithCustomToken(__initial_auth_token).catch(() => auth.signInAnonymously());
                     } else {
                         await auth.signInAnonymously();
                     }
@@ -223,18 +222,16 @@
                     auth.onAuthStateChanged((user) => {
                         if (user) {
                             isOnline = true;
-                            statusText.innerText = "Connected as Player " + user.uid.substring(0, 4);
+                            statusText.innerText = "Ready to Play Online";
                             statusText.className = "text-xs text-green-600 mb-4 font-bold";
-                        } else {
-                            statusText.innerText = "Connecting...";
                         }
                     });
                 } catch (e) {
-                    console.error("Firebase Init Error:", e);
-                    statusText.innerText = "Offline Mode Active";
+                    console.error("Firebase Error:", e);
+                    statusText.innerText = "Connection Failed. Refresh or play Local.";
                 }
             } else {
-                statusText.innerText = "Offline Mode Active";
+                statusText.innerText = "Local Environment (No Firebase)";
             }
         }
 
@@ -333,7 +330,6 @@
 
         async function syncOnline() {
             if (!db || !auth.currentUser) return;
-            // Rule 1: Use strict artifact path
             const ref = db.doc(`artifacts/${appId}/public/data/matches/${matchId}`);
             await ref.update({
                 board: JSON.stringify(boardState),
@@ -344,7 +340,7 @@
         }
 
         window.hostGame = async function() {
-            if (!isOnline) return alert("Waiting for server connection...");
+            if (!isOnline && !auth.currentUser) return alert("Still connecting to server... Please wait a few seconds.");
             const code = Math.floor(100000 + Math.random() * 900000).toString();
             matchId = code; 
             myPlayerNum = 1;
@@ -352,31 +348,42 @@
             document.getElementById('mp-waiting').classList.remove('hidden');
             document.getElementById('display-code').innerText = code;
             
-            await db.doc(`artifacts/${appId}/public/data/matches/${code}`).set({
-                board: JSON.stringify(boardState), 
-                scores, 
-                currentPlayer, 
-                status: 'waiting',
-                hostId: auth.currentUser.uid
-            });
-            listenToMatch(code);
+            try {
+                await db.doc(`artifacts/${appId}/public/data/matches/${code}`).set({
+                    board: JSON.stringify(boardState), 
+                    scores, 
+                    currentPlayer, 
+                    status: 'waiting',
+                    hostId: auth.currentUser.uid,
+                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                });
+                listenToMatch(code);
+            } catch (err) {
+                alert("Failed to host game. Please try again.");
+                cancelMultiplayer();
+            }
         };
 
         window.joinGame = async function() {
-            if (!isOnline) return alert("Waiting for server connection...");
+            if (!isOnline && !auth.currentUser) return alert("Still connecting... Please wait.");
             const code = document.getElementById('join-code').value.trim();
-            if (code.length !== 6) return;
-            const ref = db.doc(`artifacts/${appId}/public/data/matches/${code}`);
-            const snap = await ref.get();
-            if (!snap.exists()) return alert("Match code not found. Try hosting a new one.");
+            if (code.length !== 6) return alert("Please enter a 6-digit code.");
             
-            await ref.update({ 
-                status: 'active',
-                guestId: auth.currentUser.uid
-            });
-            matchId = code; 
-            myPlayerNum = 2;
-            listenToMatch(code);
+            const ref = db.doc(`artifacts/${appId}/public/data/matches/${code}`);
+            try {
+                const snap = await ref.get();
+                if (!snap.exists()) return alert("Match code not found.");
+                
+                await ref.update({ 
+                    status: 'active',
+                    guestId: auth.currentUser.uid
+                });
+                matchId = code; 
+                myPlayerNum = 2;
+                listenToMatch(code);
+            } catch (err) {
+                alert("Error joining match.");
+            }
         };
 
         function listenToMatch(code) {
@@ -385,24 +392,31 @@
                 const data = doc.data();
                 if (!data) return;
                 
-                // Transition UI when opponent joins
                 if (data.status === 'active' && document.getElementById('multiplayer-modal').style.display === 'flex') {
                     document.getElementById('multiplayer-modal').style.display = 'none';
                 }
                 
-                // Update local state if it's currently NOT our turn (meaning data came from opponent's move)
                 if (data.currentPlayer === myPlayerNum) {
                     boardState = JSON.parse(data.board);
                     scores = data.scores;
                     currentPlayer = data.currentPlayer;
                     render();
                 }
-            }, (err) => console.error("Match error:", err));
+            }, (err) => {
+                console.error("Match link broken", err);
+                cancelMultiplayer();
+            });
         }
 
         window.openMultiplayerModal = () => document.getElementById('multiplayer-modal').style.display = 'flex';
         window.closeModal = () => document.getElementById('multiplayer-modal').style.display = 'none';
-        window.cancelMultiplayer = () => { if(unsubscribeMatch) unsubscribeMatch(); matchId = null; closeModal(); };
+        window.cancelMultiplayer = () => { 
+            if(unsubscribeMatch) unsubscribeMatch(); 
+            matchId = null; 
+            document.getElementById('mp-initial').classList.remove('hidden');
+            document.getElementById('mp-waiting').classList.add('hidden');
+            closeModal(); 
+        };
         window.resetGame = () => { if(confirm("Reset the match?")) { startLocalGame(); } };
     </script>
 </body>
