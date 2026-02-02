@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tournament Damath Online</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Firebase SDKs -->
+    <!-- Firebase SDKs (Compat Version) -->
     <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore-compat.js"></script>
@@ -17,6 +17,7 @@
             max-width: 600px;
             aspect-ratio: 1/1;
             border: 4px solid #333;
+            background-color: #333;
         }
         .cell {
             position: relative;
@@ -42,18 +43,27 @@
             color: white;
             box-shadow: 0 4px 6px rgba(0,0,0,0.3);
             z-index: 10;
-            transition: transform 0.2s ease-out;
+            transition: transform 0.15s ease-out;
+            position: relative;
         }
         .pitsa.blue { background: radial-gradient(circle, #3b82f6, #1d4ed8); border: 2px solid #1e3a8a; }
         .pitsa.red { background: radial-gradient(circle, #ef4444, #b91c1c); border: 2px solid #7f1d1d; }
         .pitsa.selected { transform: scale(1.1); border: 3px solid #fbbf24; box-shadow: 0 0 15px #fbbf24; }
-        .pitsa.dama::after { content: '★'; position: absolute; top: -5px; color: #fbbf24; font-size: 1.5rem; text-shadow: 0 0 3px black; }
+        .pitsa.dama::after { 
+            content: '★'; 
+            position: absolute; 
+            top: -10px; 
+            right: -2px;
+            color: #fbbf24; 
+            font-size: 1.4rem; 
+            text-shadow: 1px 1px 2px black; 
+        }
 
         #multiplayer-modal {
             display: none;
             position: fixed;
             inset: 0;
-            background: rgba(0,0,0,0.7);
+            background: rgba(0,0,0,0.8);
             z-index: 200;
             align-items: center;
             justify-content: center;
@@ -67,14 +77,15 @@
         <div class="bg-white p-8 rounded-2xl shadow-2xl max-w-sm w-full mx-4">
             <h2 class="text-2xl font-black mb-4">Play Online</h2>
             <div id="mp-initial">
-                <button onclick="hostGame()" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold mb-3 hover:bg-blue-700 transition">Host New Match</button>
+                <p class="text-xs text-gray-500 mb-4" id="mp-status">Checking connection...</p>
+                <button id="host-btn" onclick="hostGame()" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold mb-3 hover:bg-blue-700 transition disabled:opacity-50">Host New Match</button>
                 <div class="relative flex py-5 items-center">
                     <div class="flex-grow border-t border-gray-300"></div>
                     <span class="flex-shrink mx-4 text-gray-400 text-xs font-bold">OR</span>
                     <div class="flex-grow border-t border-gray-300"></div>
                 </div>
                 <input type="text" id="join-code" placeholder="Enter 6-digit code" class="w-full p-3 border rounded-xl mb-3 text-center font-mono text-xl tracking-widest" maxlength="6">
-                <button onclick="joinGame()" class="w-full bg-slate-800 text-white py-3 rounded-xl font-bold hover:bg-slate-700 transition">Join Match</button>
+                <button id="join-btn" onclick="joinGame()" class="w-full bg-slate-800 text-white py-3 rounded-xl font-bold hover:bg-slate-700 transition disabled:opacity-50">Join Match</button>
             </div>
             <div id="mp-waiting" class="hidden text-center">
                 <p class="text-gray-500 mb-2">Match Code:</p>
@@ -82,80 +93,84 @@
                 <p class="text-xs text-gray-400 animate-pulse">Waiting for opponent...</p>
                 <button onclick="cancelMultiplayer()" class="mt-6 text-red-500 font-bold text-sm">Cancel</button>
             </div>
+            <button onclick="closeModal()" class="w-full mt-4 text-gray-400 text-xs uppercase font-bold tracking-widest">Close</button>
         </div>
     </div>
 
     <div class="max-w-4xl w-full grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div class="bg-white p-6 rounded-xl shadow-md h-fit">
-            <h1 class="text-3xl font-black text-blue-600 mb-4">DAMATH</h1>
+        <div class="bg-white p-6 rounded-xl shadow-md h-fit border border-slate-200">
+            <h1 class="text-3xl font-black text-blue-600 mb-4 tracking-tighter">DAMATH</h1>
+            
             <div class="space-y-4">
-                <div class="p-3 rounded-lg bg-blue-50 border-l-4 border-blue-500 flex justify-between">
-                    <div><p class="text-[10px] font-bold text-blue-800 uppercase">Blue</p><p id="score1" class="text-2xl font-mono font-bold">0</p></div>
+                <div class="p-3 rounded-lg bg-blue-50 border-l-4 border-blue-500">
+                    <p class="text-[10px] font-bold text-blue-800 uppercase">Blue Score</p>
+                    <p id="score1" class="text-3xl font-mono font-bold">0</p>
                 </div>
-                <div class="p-3 rounded-lg bg-red-50 border-l-4 border-red-500 flex justify-between">
-                    <div><p class="text-[10px] font-bold text-red-800 uppercase">Red</p><p id="score2" class="text-2xl font-mono font-bold">0</p></div>
+                <div class="p-3 rounded-lg bg-red-50 border-l-4 border-red-500">
+                    <p class="text-[10px] font-bold text-red-800 uppercase">Red Score</p>
+                    <p id="score2" class="text-3xl font-mono font-bold">0</p>
                 </div>
             </div>
-            <button onclick="openMultiplayerModal()" class="w-full mt-6 bg-indigo-600 text-white py-2 rounded-lg font-bold">Multiplayer</button>
-            <p id="turn-indicator" class="mt-4 text-center font-bold py-2 rounded bg-blue-100 text-blue-800 uppercase text-sm">Blue's Turn</p>
-            <button onclick="resetGame()" class="w-full mt-4 bg-slate-200 text-slate-700 py-2 rounded-lg text-sm font-bold">Reset</button>
+
+            <button onclick="openMultiplayerModal()" class="w-full mt-6 bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-200 transition">
+                Multiplayer
+            </button>
+            
+            <p id="turn-indicator" class="mt-4 text-center font-bold py-2 rounded bg-blue-100 text-blue-800 uppercase text-xs tracking-widest">
+                Blue's Turn
+            </p>
+            
+            <button onclick="resetGame()" class="w-full mt-4 bg-slate-100 text-slate-500 py-2 rounded-lg text-xs font-bold hover:bg-slate-200 transition">
+                Reset Board
+            </button>
         </div>
 
         <div class="md:col-span-2">
-            <div id="board" class="board-grid shadow-2xl rounded overflow-hidden mx-auto"></div>
-            <div class="mt-4 bg-white p-4 rounded-xl shadow-md border">
-                <p class="text-xs font-bold text-gray-500 uppercase mb-2">Share Link</p>
-                <input type="text" id="share-url" readonly class="w-full bg-slate-50 border rounded-lg px-3 py-2 text-xs font-mono" value="">
+            <div id="board" class="board-grid shadow-2xl rounded-lg overflow-hidden mx-auto border-8 border-slate-800">
+                <!-- Board generated by JS -->
+            </div>
+            
+            <div class="mt-6 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <p class="text-[10px] font-bold text-gray-400 uppercase mb-2">Game URL</p>
+                <input type="text" id="share-url" readonly class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono text-gray-500 outline-none" value="">
             </div>
         </div>
     </div>
 
     <script>
+        // Global State
         let db, auth, appId = 'damath-v1';
-        
-        // GITHUB COMPATIBILITY LAYER
-        function startApp() {
-            try {
-                let config;
-                if (typeof __firebase_config !== 'undefined') {
-                    config = JSON.parse(__firebase_config);
-                } else {
-                    // FALLBACK: If hosted on GitHub, we initialize a basic local state
-                    // Multiplayer will be disabled unless you provide your own Firebase config
-                    console.warn("External host detected. Multiplayer requires Firebase configuration.");
-                    initBoard(); 
-                    return;
-                }
-                
-                firebase.initializeApp(config);
-                auth = firebase.auth();
-                db = firebase.firestore();
-                document.getElementById('share-url').value = window.location.href;
-                
-                initAuth().then(initBoard);
-            } catch (e) {
-                console.error("Boot error:", e);
-                initBoard(); // Ensure board shows up even if Firebase fails
-            }
-        }
-
-        let boardState = [], currentPlayer = 1, scores = { 1: 0, 2: 0 }, selectedPiece = null, validMoves = [];
-        let matchId = null, myPlayerNum = null, unsubscribeMatch = null;
+        let boardState = [];
+        let currentPlayer = 1;
+        let scores = { 1: 0, 2: 0 };
+        let selectedPiece = null;
+        let validMoves = [];
+        let matchId = null;
+        let myPlayerNum = null;
+        let unsubscribeMatch = null;
 
         const operators = [
-            ['', '+', '', '-', '', 'x', '', '÷'], ['÷', '', 'x', '', '-', '', '+', ''],
-            ['', '+', '', '-', '', 'x', '', '÷'], ['÷', '', 'x', '', '-', '', '+', ''],
-            ['', '+', '', '-', '', 'x', '', '÷'], ['÷', '', 'x', '', '-', '', '+', ''],
-            ['', '+', '', '-', '', 'x', '', '÷'], ['÷', '', 'x', '', '-', '', '+', '']
+            ['', '+', '', '-', '', 'x', '', '÷'],
+            ['÷', '', 'x', '', '-', '', '+', ''],
+            ['', '+', '', '-', '', 'x', '', '÷'],
+            ['÷', '', 'x', '', '-', '', '+', ''],
+            ['', '+', '', '-', '', 'x', '', '÷'],
+            ['÷', '', 'x', '', '-', '', '+', ''],
+            ['', '+', '', '-', '', 'x', '', '÷'],
+            ['÷', '', 'x', '', '-', '', '+', '']
         ];
 
-        async function initAuth() {
-            if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                await auth.signInWithCustomToken(__initial_auth_token);
-            } else {
-                await auth.signInAnonymously();
-            }
-        }
+        // 1. IMMEDIATE BOOT (The fix for blank screen)
+        window.onload = function() {
+            // Set URL immediately
+            document.getElementById('share-url').value = window.location.href;
+            
+            // Draw the board immediately so it's never blank
+            initBoard();
+            
+            // 2. LATER: Attempt Firebase Connection
+            tryConnectFirebase();
+        };
 
         function initBoard() {
             boardState = Array(8).fill(null).map(() => Array(8).fill(null));
@@ -167,8 +182,43 @@
                 { r: 6, c: 1, v: 11 }, { r: 6, c: 3, v: 9 }, { r: 6, c: 5, v: 7 }, { r: 6, c: 7, v: 5 },
                 { r: 7, c: 0, v: 4 }, { r: 7, c: 2, v: 6 }, { r: 7, c: 4, v: 8 }, { r: 7, c: 6, v: 10 }
             ];
-            setup.forEach(p => boardState[p.r][p.c] = { val: p.v, player: p.r < 3 ? 2 : 1, isDama: false });
+            setup.forEach(p => {
+                boardState[p.r][p.c] = { val: p.v, player: p.r < 3 ? 2 : 1, isDama: false };
+            });
             render();
+        }
+
+        function tryConnectFirebase() {
+            const statusText = document.getElementById('mp-status');
+            const hostBtn = document.getElementById('host-btn');
+            const joinBtn = document.getElementById('join-btn');
+
+            if (typeof __firebase_config !== 'undefined') {
+                try {
+                    const config = JSON.parse(__firebase_config);
+                    firebase.initializeApp(config);
+                    auth = firebase.auth();
+                    db = firebase.firestore();
+                    
+                    statusText.innerText = "Online Services Ready";
+                    statusText.className = "text-xs text-green-600 mb-4 font-bold";
+                    
+                    // Sign in
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        auth.signInWithCustomToken(__initial_auth_token);
+                    } else {
+                        auth.signInAnonymously();
+                    }
+                } catch (e) {
+                    statusText.innerText = "Multiplayer unavailable on this host.";
+                    hostBtn.disabled = true;
+                    joinBtn.disabled = true;
+                }
+            } else {
+                statusText.innerText = "Local Mode Only (GitHub)";
+                hostBtn.disabled = true;
+                joinBtn.disabled = true;
+            }
         }
 
         function render() {
@@ -181,6 +231,7 @@
                     cell.className = `cell ${isDark ? 'dark' : 'light'}`;
                     cell.innerText = operators[r][c];
                     if (isDark) cell.onclick = () => handleCellClick(r, c);
+
                     const piece = boardState[r][c];
                     if (piece) {
                         const pDiv = document.createElement('div');
@@ -191,7 +242,7 @@
                     }
                     if (validMoves.some(m => m.r === r && m.c === c)) {
                         const dot = document.createElement('div');
-                        dot.className = 'absolute w-3 h-3 rounded-full bg-yellow-400 opacity-70';
+                        dot.className = 'absolute w-3 h-3 rounded-full bg-yellow-400 opacity-80 animate-pulse';
                         cell.appendChild(dot);
                     }
                     board.appendChild(cell);
@@ -201,7 +252,7 @@
             document.getElementById('score2').innerText = scores[2];
             const ti = document.getElementById('turn-indicator');
             ti.innerText = `${currentPlayer === 1 ? "Blue" : "Red"}'s Turn`;
-            ti.className = `mt-4 text-center font-bold py-2 rounded uppercase text-sm ${currentPlayer === 1 ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}`;
+            ti.className = `mt-4 text-center font-bold py-2 rounded uppercase text-xs tracking-widest ${currentPlayer === 1 ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}`;
         }
 
         function handleCellClick(r, c) {
@@ -222,12 +273,15 @@
             const moves = [];
             const dirs = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
             const moveDirs = piece.isDama ? dirs : (piece.player === 1 ? [[-1, -1], [-1, 1]] : [[1, -1], [1, 1]]);
+            
             moveDirs.forEach(d => {
                 let nr = r + d[0], nc = c + d[1];
                 if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8 && !state[nr][nc]) moves.push({ r: nr, c: nc });
             });
+
             dirs.forEach(d => {
-                let nr = r + d[0], nc = c + d[1], jr = r + d[0]*2, jc = c + d[1]*2;
+                let nr = r + d[0], nc = c + d[1];
+                let jr = r + d[0] * 2, jc = c + d[1] * 2;
                 if (jr >= 0 && jr < 8 && jc >= 0 && jc < 8 && state[nr][nc] && state[nr][nc].player !== piece.player && !state[jr][jc]) {
                     moves.push({ r: jr, c: jc, capture: { r: nr, c: nc } });
                 }
@@ -251,19 +305,26 @@
             boardState[tR][tC] = piece;
             boardState[fR][fC] = null;
             if (!piece.isDama && ((currentPlayer === 1 && tR === 0) || (currentPlayer === 2 && tR === 7))) piece.isDama = true;
+            
             currentPlayer = currentPlayer === 1 ? 2 : 1;
-            selectedPiece = null; validMoves = [];
+            selectedPiece = null;
+            validMoves = [];
             if (matchId && db) syncOnline();
             render();
         }
 
         async function syncOnline() {
             const ref = db.doc(`artifacts/${appId}/public/data/matches/${matchId}`);
-            await ref.update({ board: JSON.stringify(boardState), scores, currentPlayer });
+            await ref.update({
+                board: JSON.stringify(boardState),
+                scores,
+                currentPlayer,
+                lastUpdate: firebase.firestore.FieldValue.serverTimestamp()
+            });
         }
 
         window.hostGame = async function() {
-            if (!db) return alert("Firebase not configured for this host.");
+            if (!db) return;
             const code = Math.floor(100000 + Math.random() * 900000).toString();
             matchId = code; myPlayerNum = 1;
             document.getElementById('mp-initial').classList.add('hidden');
@@ -276,17 +337,22 @@
         };
 
         window.joinGame = async function() {
-            if (!db) return alert("Firebase not configured.");
+            if (!db) return;
             const code = document.getElementById('join-code').value.trim();
+            if (code.length !== 6) return;
             const ref = db.doc(`artifacts/${appId}/public/data/matches/${code}`);
+            const snap = await ref.get();
+            if (!snap.exists()) return alert("Match not found");
             await ref.update({ status: 'active' });
             matchId = code; myPlayerNum = 2;
             listenToMatch(code);
         };
 
         function listenToMatch(code) {
+            if (unsubscribeMatch) unsubscribeMatch();
             unsubscribeMatch = db.doc(`artifacts/${appId}/public/data/matches/${code}`).onSnapshot(doc => {
                 const data = doc.data();
+                if (!data) return;
                 if (data.status === 'active') document.getElementById('multiplayer-modal').style.display = 'none';
                 if (data.currentPlayer === myPlayerNum) {
                     boardState = JSON.parse(data.board);
@@ -298,8 +364,9 @@
         }
 
         window.openMultiplayerModal = () => document.getElementById('multiplayer-modal').style.display = 'flex';
-        window.resetGame = () => { initBoard(); if(matchId && db) syncOnline(); };
-        window.onload = startApp;
+        window.closeModal = () => document.getElementById('multiplayer-modal').style.display = 'none';
+        window.cancelMultiplayer = () => { if(unsubscribeMatch) unsubscribeMatch(); matchId = null; closeModal(); };
+        window.resetGame = () => { if(confirm("Reset the match?")) { initBoard(); if(matchId && db) syncOnline(); } };
     </script>
 </body>
 </html>
