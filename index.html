@@ -58,20 +58,6 @@
             align-items: center;
             justify-content: center;
         }
-
-        .copy-toast {
-            position: fixed;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            background: #10b981;
-            color: white;
-            padding: 8px 16px;
-            border-radius: 9999px;
-            font-weight: bold;
-            display: none;
-            z-index: 300;
-        }
     </style>
 </head>
 <body class="bg-slate-100 min-h-screen flex flex-col items-center p-4 font-sans">
@@ -102,99 +88,65 @@
     <div class="max-w-4xl w-full grid grid-cols-1 md:grid-cols-3 gap-6">
         <div class="bg-white p-6 rounded-xl shadow-md h-fit">
             <h1 class="text-3xl font-black text-blue-600 mb-4">DAMATH</h1>
-            
             <div class="space-y-4">
-                <div class="p-3 rounded-lg bg-blue-50 border-l-4 border-blue-500 flex justify-between items-center">
-                    <div>
-                        <p class="text-[10px] font-bold text-blue-800 uppercase">Blue</p>
-                        <p id="score1" class="text-2xl font-mono font-bold">0</p>
-                    </div>
-                    <div id="p1-indicator" class="w-2 h-2 rounded-full bg-gray-300"></div>
+                <div class="p-3 rounded-lg bg-blue-50 border-l-4 border-blue-500 flex justify-between">
+                    <div><p class="text-[10px] font-bold text-blue-800 uppercase">Blue</p><p id="score1" class="text-2xl font-mono font-bold">0</p></div>
                 </div>
-                <div class="p-3 rounded-lg bg-red-50 border-l-4 border-red-500 flex justify-between items-center">
-                    <div>
-                        <p class="text-[10px] font-bold text-red-800 uppercase">Red</p>
-                        <p id="score2" class="text-2xl font-mono font-bold">0</p>
-                    </div>
-                    <div id="p2-indicator" class="w-2 h-2 rounded-full bg-gray-300"></div>
+                <div class="p-3 rounded-lg bg-red-50 border-l-4 border-red-500 flex justify-between">
+                    <div><p class="text-[10px] font-bold text-red-800 uppercase">Red</p><p id="score2" class="text-2xl font-mono font-bold">0</p></div>
                 </div>
             </div>
-
-            <div class="mt-6 space-y-2">
-                <button onclick="openMultiplayerModal()" class="w-full bg-indigo-600 text-white py-2 rounded-lg font-bold hover:bg-indigo-700 transition">
-                    Multiplayer
-                </button>
-                <button id="resync-btn" onclick="manualResync()" class="hidden w-full bg-slate-100 text-slate-500 py-1 rounded text-xs font-bold hover:bg-slate-200">
-                    Re-sync Board
-                </button>
-            </div>
-
-            <div class="mt-6">
-                <p id="turn-indicator" class="text-center font-bold py-2 rounded bg-blue-100 text-blue-800 uppercase tracking-widest text-sm">
-                    Blue's Turn
-                </p>
-            </div>
-            
-            <button onclick="resetGame()" class="w-full mt-4 bg-slate-200 text-slate-700 py-2 rounded-lg hover:bg-slate-300 transition text-sm font-bold">Reset Match</button>
+            <button onclick="openMultiplayerModal()" class="w-full mt-6 bg-indigo-600 text-white py-2 rounded-lg font-bold">Multiplayer</button>
+            <p id="turn-indicator" class="mt-4 text-center font-bold py-2 rounded bg-blue-100 text-blue-800 uppercase text-sm">Blue's Turn</p>
+            <button onclick="resetGame()" class="w-full mt-4 bg-slate-200 text-slate-700 py-2 rounded-lg text-sm font-bold">Reset</button>
         </div>
 
-        <div class="md:col-span-2 flex flex-col gap-4">
+        <div class="md:col-span-2">
             <div id="board" class="board-grid shadow-2xl rounded overflow-hidden mx-auto"></div>
-            
-            <div class="bg-white p-4 rounded-xl shadow-md border border-slate-200">
+            <div class="mt-4 bg-white p-4 rounded-xl shadow-md border">
                 <p class="text-xs font-bold text-gray-500 uppercase mb-2">Share Link</p>
-                <div class="flex gap-2">
-                    <input type="text" id="share-url" readonly class="flex-1 bg-slate-50 border border-slate-300 rounded-lg px-3 py-2 text-sm text-gray-600 font-mono" value="">
-                    <button onclick="copyShareLink()" class="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-bold hover:bg-blue-700 transition">
-                        Copy
-                    </button>
-                </div>
+                <input type="text" id="share-url" readonly class="w-full bg-slate-50 border rounded-lg px-3 py-2 text-xs font-mono" value="">
             </div>
         </div>
     </div>
 
-    <div id="copy-toast" class="copy-toast">Link copied!</div>
-
     <script>
-        // Initialization Guard
-        let db, auth, appId;
-        const boardElement = document.getElementById('board');
-        const shareUrlInput = document.getElementById('share-url');
-
+        let db, auth, appId = 'damath-v1';
+        
+        // GITHUB COMPATIBILITY LAYER
         function startApp() {
             try {
-                const firebaseConfig = JSON.parse(__firebase_config);
-                firebase.initializeApp(firebaseConfig);
+                let config;
+                if (typeof __firebase_config !== 'undefined') {
+                    config = JSON.parse(__firebase_config);
+                } else {
+                    // FALLBACK: If hosted on GitHub, we initialize a basic local state
+                    // Multiplayer will be disabled unless you provide your own Firebase config
+                    console.warn("External host detected. Multiplayer requires Firebase configuration.");
+                    initBoard(); 
+                    return;
+                }
+                
+                firebase.initializeApp(config);
                 auth = firebase.auth();
                 db = firebase.firestore();
-                appId = typeof __app_id !== 'undefined' ? __app_id : 'damath-v1';
+                document.getElementById('share-url').value = window.location.href;
                 
-                shareUrlInput.value = window.location.href;
                 initAuth().then(initBoard);
             } catch (e) {
-                console.error("Initialization failed, retrying...", e);
-                setTimeout(startApp, 1000);
+                console.error("Boot error:", e);
+                initBoard(); // Ensure board shows up even if Firebase fails
             }
         }
 
-        let boardState = [];
-        let currentPlayer = 1;
-        let scores = { 1: 0, 2: 0 };
-        let selectedPiece = null;
-        let validMoves = [];
-        let matchId = null;
-        let myPlayerNum = null;
-        let unsubscribeMatch = null;
+        let boardState = [], currentPlayer = 1, scores = { 1: 0, 2: 0 }, selectedPiece = null, validMoves = [];
+        let matchId = null, myPlayerNum = null, unsubscribeMatch = null;
 
         const operators = [
-            ['', '+', '', '-', '', 'x', '', '÷'],
-            ['÷', '', 'x', '', '-', '', '+', ''],
-            ['', '+', '', '-', '', 'x', '', '÷'],
-            ['÷', '', 'x', '', '-', '', '+', ''],
-            ['', '+', '', '-', '', 'x', '', '÷'],
-            ['÷', '', 'x', '', '-', '', '+', ''],
-            ['', '+', '', '-', '', 'x', '', '÷'],
-            ['÷', '', 'x', '', '-', '', '+', '']
+            ['', '+', '', '-', '', 'x', '', '÷'], ['÷', '', 'x', '', '-', '', '+', ''],
+            ['', '+', '', '-', '', 'x', '', '÷'], ['÷', '', 'x', '', '-', '', '+', ''],
+            ['', '+', '', '-', '', 'x', '', '÷'], ['÷', '', 'x', '', '-', '', '+', ''],
+            ['', '+', '', '-', '', 'x', '', '÷'], ['÷', '', 'x', '', '-', '', '+', '']
         ];
 
         async function initAuth() {
@@ -215,14 +167,13 @@
                 { r: 6, c: 1, v: 11 }, { r: 6, c: 3, v: 9 }, { r: 6, c: 5, v: 7 }, { r: 6, c: 7, v: 5 },
                 { r: 7, c: 0, v: 4 }, { r: 7, c: 2, v: 6 }, { r: 7, c: 4, v: 8 }, { r: 7, c: 6, v: 10 }
             ];
-            setup.forEach(p => {
-                boardState[p.r][p.c] = { val: p.v, player: p.r < 3 ? 2 : 1, isDama: false };
-            });
+            setup.forEach(p => boardState[p.r][p.c] = { val: p.v, player: p.r < 3 ? 2 : 1, isDama: false });
             render();
         }
 
         function render() {
-            boardElement.innerHTML = '';
+            const board = document.getElementById('board');
+            board.innerHTML = '';
             for (let r = 0; r < 8; r++) {
                 for (let c = 0; c < 8; c++) {
                     const cell = document.createElement('div');
@@ -230,28 +181,27 @@
                     cell.className = `cell ${isDark ? 'dark' : 'light'}`;
                     cell.innerText = operators[r][c];
                     if (isDark) cell.onclick = () => handleCellClick(r, c);
-
                     const piece = boardState[r][c];
                     if (piece) {
-                        const div = document.createElement('div');
-                        div.className = `pitsa ${piece.player === 1 ? 'blue' : 'red'} ${piece.isDama ? 'dama' : ''}`;
-                        if (selectedPiece && selectedPiece.r === r && selectedPiece.c === c) div.classList.add('selected');
-                        div.innerText = piece.val;
-                        cell.appendChild(div);
+                        const pDiv = document.createElement('div');
+                        pDiv.className = `pitsa ${piece.player === 1 ? 'blue' : 'red'} ${piece.isDama ? 'dama' : ''}`;
+                        if (selectedPiece && selectedPiece.r === r && selectedPiece.c === c) pDiv.classList.add('selected');
+                        pDiv.innerText = piece.val;
+                        cell.appendChild(pDiv);
                     }
                     if (validMoves.some(m => m.r === r && m.c === c)) {
                         const dot = document.createElement('div');
-                        dot.className = 'absolute w-3 h-3 rounded-full bg-yellow-400 animate-pulse';
+                        dot.className = 'absolute w-3 h-3 rounded-full bg-yellow-400 opacity-70';
                         cell.appendChild(dot);
                     }
-                    boardElement.appendChild(cell);
+                    board.appendChild(cell);
                 }
             }
             document.getElementById('score1').innerText = scores[1];
             document.getElementById('score2').innerText = scores[2];
-            const turnIndicator = document.getElementById('turn-indicator');
-            turnIndicator.innerText = `${currentPlayer === 1 ? "Blue" : "Red"}'s Turn`;
-            turnIndicator.className = `text-center font-bold py-2 rounded uppercase tracking-widest text-sm ${currentPlayer === 1 ? "bg-blue-100 text-blue-800" : "bg-red-100 text-red-800"}`;
+            const ti = document.getElementById('turn-indicator');
+            ti.innerText = `${currentPlayer === 1 ? "Blue" : "Red"}'s Turn`;
+            ti.className = `mt-4 text-center font-bold py-2 rounded uppercase text-sm ${currentPlayer === 1 ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}`;
         }
 
         function handleCellClick(r, c) {
@@ -272,17 +222,12 @@
             const moves = [];
             const dirs = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
             const moveDirs = piece.isDama ? dirs : (piece.player === 1 ? [[-1, -1], [-1, 1]] : [[1, -1], [1, 1]]);
-
             moveDirs.forEach(d => {
                 let nr = r + d[0], nc = c + d[1];
-                if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8 && !state[nr][nc]) {
-                    moves.push({ r: nr, c: nc });
-                }
+                if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8 && !state[nr][nc]) moves.push({ r: nr, c: nc });
             });
-
             dirs.forEach(d => {
-                let nr = r + d[0], nc = c + d[1];
-                let jr = r + d[0] * 2, jc = c + d[1] * 2;
+                let nr = r + d[0], nc = c + d[1], jr = r + d[0]*2, jc = c + d[1]*2;
                 if (jr >= 0 && jr < 8 && jc >= 0 && jc < 8 && state[nr][nc] && state[nr][nc].player !== piece.player && !state[jr][jc]) {
                     moves.push({ r: jr, c: jc, capture: { r: nr, c: nc } });
                 }
@@ -306,109 +251,54 @@
             boardState[tR][tC] = piece;
             boardState[fR][fC] = null;
             if (!piece.isDama && ((currentPlayer === 1 && tR === 0) || (currentPlayer === 2 && tR === 7))) piece.isDama = true;
-            
             currentPlayer = currentPlayer === 1 ? 2 : 1;
-            selectedPiece = null;
-            validMoves = [];
-            if (matchId) syncOnline();
+            selectedPiece = null; validMoves = [];
+            if (matchId && db) syncOnline();
             render();
         }
 
         async function syncOnline() {
-            if (!matchId || !auth.currentUser) return;
             const ref = db.doc(`artifacts/${appId}/public/data/matches/${matchId}`);
-            await ref.update({
-                board: JSON.stringify(boardState),
-                scores,
-                currentPlayer,
-                lastMove: firebase.firestore.FieldValue.serverTimestamp()
-            });
+            await ref.update({ board: JSON.stringify(boardState), scores, currentPlayer });
         }
 
         window.hostGame = async function() {
+            if (!db) return alert("Firebase not configured for this host.");
             const code = Math.floor(100000 + Math.random() * 900000).toString();
-            matchId = code;
-            myPlayerNum = 1;
+            matchId = code; myPlayerNum = 1;
             document.getElementById('mp-initial').classList.add('hidden');
             document.getElementById('mp-waiting').classList.remove('hidden');
             document.getElementById('display-code').innerText = code;
-            document.getElementById('resync-btn').classList.remove('hidden');
-
-            const ref = db.doc(`artifacts/${appId}/public/data/matches/${code}`);
-            await ref.set({
-                board: JSON.stringify(boardState),
-                scores,
-                currentPlayer,
-                p1: auth.currentUser.uid,
-                status: 'waiting'
+            await db.doc(`artifacts/${appId}/public/data/matches/${code}`).set({
+                board: JSON.stringify(boardState), scores, currentPlayer, status: 'waiting'
             });
             listenToMatch(code);
         };
 
         window.joinGame = async function() {
+            if (!db) return alert("Firebase not configured.");
             const code = document.getElementById('join-code').value.trim();
-            if (code.length !== 6) return;
             const ref = db.doc(`artifacts/${appId}/public/data/matches/${code}`);
-            const snap = await ref.get();
-            if (!snap.exists()) return;
-            await ref.update({ p2: auth.currentUser.uid, status: 'active' });
-            matchId = code;
-            myPlayerNum = 2;
-            document.getElementById('resync-btn').classList.remove('hidden');
+            await ref.update({ status: 'active' });
+            matchId = code; myPlayerNum = 2;
             listenToMatch(code);
         };
 
         function listenToMatch(code) {
-            if (unsubscribeMatch) unsubscribeMatch();
             unsubscribeMatch = db.doc(`artifacts/${appId}/public/data/matches/${code}`).onSnapshot(doc => {
                 const data = doc.data();
-                if (!data) return;
-                
-                if (data.status === 'active') {
-                    document.getElementById('multiplayer-modal').style.display = 'none';
-                }
-                
-                // Indicators
-                document.getElementById('p1-indicator').className = `w-2 h-2 rounded-full ${data.p1 ? 'bg-green-500' : 'bg-gray-300'}`;
-                document.getElementById('p2-indicator').className = `w-2 h-2 rounded-full ${data.p2 ? 'bg-green-500' : 'bg-gray-300'}`;
-
-                if (data.currentPlayer === myPlayerNum || data.status === 'active') {
+                if (data.status === 'active') document.getElementById('multiplayer-modal').style.display = 'none';
+                if (data.currentPlayer === myPlayerNum) {
                     boardState = JSON.parse(data.board);
                     scores = data.scores;
                     currentPlayer = data.currentPlayer;
                     render();
                 }
-            }, err => console.error("Match listener error:", err));
+            });
         }
 
-        window.manualResync = async () => {
-            if (!matchId) return;
-            const snap = await db.doc(`artifacts/${appId}/public/data/matches/${matchId}`).get();
-            if (snap.exists()) {
-                const data = snap.data();
-                boardState = JSON.parse(data.board);
-                scores = data.scores;
-                currentPlayer = data.currentPlayer;
-                render();
-            }
-        };
-
         window.openMultiplayerModal = () => document.getElementById('multiplayer-modal').style.display = 'flex';
-        window.cancelMultiplayer = () => {
-            if (unsubscribeMatch) unsubscribeMatch();
-            matchId = null;
-            document.getElementById('multiplayer-modal').style.display = 'none';
-        };
-        window.resetGame = () => { initBoard(); if(matchId) syncOnline(); };
-        window.copyShareLink = () => {
-            shareUrlInput.select();
-            document.execCommand('copy');
-            const toast = document.getElementById('copy-toast');
-            toast.style.display = 'block';
-            setTimeout(() => toast.style.display = 'none', 2000);
-        };
-
-        // Start checking for readiness
+        window.resetGame = () => { initBoard(); if(matchId && db) syncOnline(); };
         window.onload = startApp;
     </script>
 </body>
