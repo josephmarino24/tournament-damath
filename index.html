@@ -78,6 +78,11 @@
             <h2 class="text-2xl font-black mb-4">Play Online</h2>
             <div id="mp-initial">
                 <p class="text-xs text-gray-500 mb-4" id="mp-status">Checking connection...</p>
+                <div id="mp-error-box" class="hidden p-3 bg-amber-50 border border-amber-200 rounded-lg mb-4">
+                    <p class="text-[10px] text-amber-800 leading-tight">
+                        <strong>Notice:</strong> Online multiplayer is restricted to the development environment. On GitHub, please play locally with a friend on one device.
+                    </p>
+                </div>
                 <button id="host-btn" onclick="hostGame()" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold mb-3 hover:bg-blue-700 transition disabled:opacity-50">Host New Match</button>
                 <div class="relative flex py-5 items-center">
                     <div class="flex-grow border-t border-gray-300"></div>
@@ -160,15 +165,9 @@
             ['÷', '', 'x', '', '-', '', '+', '']
         ];
 
-        // 1. IMMEDIATE BOOT (The fix for blank screen)
         window.onload = function() {
-            // Set URL immediately
             document.getElementById('share-url').value = window.location.href;
-            
-            // Draw the board immediately so it's never blank
             initBoard();
-            
-            // 2. LATER: Attempt Firebase Connection
             tryConnectFirebase();
         };
 
@@ -190,6 +189,7 @@
 
         function tryConnectFirebase() {
             const statusText = document.getElementById('mp-status');
+            const errorBox = document.getElementById('mp-error-box');
             const hostBtn = document.getElementById('host-btn');
             const joinBtn = document.getElementById('join-btn');
 
@@ -203,22 +203,25 @@
                     statusText.innerText = "Online Services Ready";
                     statusText.className = "text-xs text-green-600 mb-4 font-bold";
                     
-                    // Sign in
                     if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
                         auth.signInWithCustomToken(__initial_auth_token);
                     } else {
                         auth.signInAnonymously();
                     }
                 } catch (e) {
-                    statusText.innerText = "Multiplayer unavailable on this host.";
-                    hostBtn.disabled = true;
-                    joinBtn.disabled = true;
+                    showLocalOnlyUI(statusText, errorBox, hostBtn, joinBtn);
                 }
             } else {
-                statusText.innerText = "Local Mode Only (GitHub)";
-                hostBtn.disabled = true;
-                joinBtn.disabled = true;
+                showLocalOnlyUI(statusText, errorBox, hostBtn, joinBtn);
             }
+        }
+
+        function showLocalOnlyUI(status, error, host, join) {
+            status.innerText = "Local Mode Active";
+            status.className = "text-xs text-slate-400 mb-4 font-bold";
+            error.classList.remove('hidden');
+            host.disabled = true;
+            join.disabled = true;
         }
 
         function render() {
@@ -314,6 +317,7 @@
         }
 
         async function syncOnline() {
+            if (!db) return;
             const ref = db.doc(`artifacts/${appId}/public/data/matches/${matchId}`);
             await ref.update({
                 board: JSON.stringify(boardState),
@@ -324,7 +328,10 @@
         }
 
         window.hostGame = async function() {
-            if (!db) return;
+            if (!db) {
+                alert("Online play is unavailable on this host.");
+                return;
+            }
             const code = Math.floor(100000 + Math.random() * 900000).toString();
             matchId = code; myPlayerNum = 1;
             document.getElementById('mp-initial').classList.add('hidden');
@@ -337,7 +344,10 @@
         };
 
         window.joinGame = async function() {
-            if (!db) return;
+            if (!db) {
+                alert("Online play is unavailable on this host.");
+                return;
+            }
             const code = document.getElementById('join-code').value.trim();
             if (code.length !== 6) return;
             const ref = db.doc(`artifacts/${appId}/public/data/matches/${code}`);
