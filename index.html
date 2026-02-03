@@ -96,7 +96,7 @@
     <div id="multiplayer-modal">
         <div class="bg-white p-8 rounded-3xl shadow-2xl max-w-sm w-full mx-4 border border-slate-200">
             <h2 class="text-3xl font-black mb-1 text-slate-800 tracking-tight text-center">Play Online</h2>
-            <p id="mp-status" class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-6 text-center">Checking Connection...</p>
+            <p id="mp-status" class="text-[10px] font-bold uppercase tracking-widest text-orange-500 mb-6 text-center">Initializing Connection...</p>
             
             <div id="mp-initial">
                 <button id="host-btn" onclick="hostGame()" class="w-full bg-blue-600 text-white py-4 rounded-2xl font-black mb-3 hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 active:scale-95">Host New Match</button>
@@ -201,8 +201,12 @@
     </div>
 
     <script>
-        const MANUAL_FIREBASE_CONFIG = {
-            apiKey: "",
+        // Environment Variables
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'tournament-damath-v2';
+        const firebaseConfigStr = typeof __firebase_config !== 'undefined' ? __firebase_config : null;
+        
+        const DEFAULT_CONFIG = {
+            apiKey: "", // Handled by environment
             authDomain: "tournament-damath.firebaseapp.com",
             projectId: "tournament-damath",
             storageBucket: "tournament-damath.firebasestorage.app",
@@ -211,7 +215,7 @@
         };
 
         // Global State
-        let db, auth, appId = typeof __app_id !== 'undefined' ? __app_id : 'tournament-damath-v2';
+        let db, auth;
         let boardState = [];
         let currentPlayer = 1;
         let scores = { 1: 0, 2: 0 };
@@ -242,6 +246,46 @@
             tryConnectFirebase();
         };
 
+        async function tryConnectFirebase() {
+            const statusText = document.getElementById('mp-status');
+            let config = firebaseConfigStr ? JSON.parse(firebaseConfigStr) : DEFAULT_CONFIG;
+
+            try {
+                if (!firebase.apps.length) firebase.initializeApp(config);
+                auth = firebase.auth();
+                db = firebase.firestore();
+
+                // Listen for auth state
+                auth.onAuthStateChanged((user) => {
+                    if (user) {
+                        isOnline = true;
+                        statusText.innerText = "Online - Ready";
+                        statusText.className = "text-[10px] font-bold uppercase tracking-widest text-green-500 mb-6 text-center";
+                    }
+                });
+
+                // Attempt sign in
+                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                    await auth.signInWithCustomToken(__initial_auth_token);
+                } else {
+                    await auth.signInAnonymously();
+                }
+
+                // Reliability check: if after 2s still "Checking", update status
+                setTimeout(() => {
+                    if (!isOnline) {
+                        statusText.innerText = "Server Slow... Click Host to Retry";
+                        statusText.className = "text-[10px] font-bold uppercase tracking-widest text-orange-400 mb-6 text-center";
+                    }
+                }, 2000);
+
+            } catch (e) {
+                console.error("Firebase Error:", e);
+                statusText.innerText = "Offline Mode - Check Internet";
+                statusText.className = "text-[10px] font-bold uppercase tracking-widest text-red-500 mb-6 text-center";
+            }
+        }
+
         function startTimer() {
             if (timerInterval) clearInterval(timerInterval);
             timerInterval = setInterval(() => {
@@ -257,18 +301,18 @@
         function updateTimerDisplay() {
             const m = Math.floor(timerSeconds / 60);
             const s = timerSeconds % 60;
-            document.getElementById('timer').innerText = `${m}:${s.toString().padStart(2, '0')}`;
+            const display = document.getElementById('timer');
+            if (display) display.innerText = `${m}:${s.toString().padStart(2, '0')}`;
         }
 
         function initBoard() {
             gameOver = false;
             timerSeconds = 1200;
             updateTimerDisplay();
-            startTimer(); // Timer starts immediately
+            startTimer();
 
             boardState = Array(8).fill(null).map(() => Array(8).fill(null));
             
-            // Available Damath chips values (randomized with negatives)
             const getVal = () => {
                 const base = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
                 const val = base[Math.floor(Math.random() * base.length)];
@@ -290,31 +334,9 @@
             render();
         }
 
-        async function tryConnectFirebase() {
-            const statusText = document.getElementById('mp-status');
-            let config = (typeof __firebase_config !== 'undefined' && __firebase_config) ? JSON.parse(__firebase_config) : MANUAL_FIREBASE_CONFIG;
-
-            if (config && config.apiKey) {
-                try {
-                    if (!firebase.apps.length) firebase.initializeApp(config);
-                    auth = firebase.auth();
-                    db = firebase.firestore();
-                    await auth.signInAnonymously();
-                    auth.onAuthStateChanged((user) => {
-                        if (user) {
-                            isOnline = true;
-                            statusText.innerText = "Online - Ready";
-                            statusText.className = "text-[10px] font-bold uppercase tracking-widest text-green-500 mb-6 text-center";
-                        }
-                    });
-                } catch (e) {
-                    console.error("Firebase Connection Failed");
-                }
-            }
-        }
-
         function render() {
             const board = document.getElementById('board');
+            if (!board) return;
             board.innerHTML = '';
             
             const allForced = getForcedCaptures(currentPlayer);
@@ -523,20 +545,26 @@
         }
 
         async function syncOnline() {
-            if (!db || !auth.currentUser || !matchId) return;
-            const ref = db.doc(`artifacts/${appId}/public/data/matches/${matchId}`);
-            await ref.update({
-                board: JSON.stringify(boardState),
-                scores,
-                currentPlayer,
-                timerSeconds,
-                gameOver,
-                lastUpdate: firebase.firestore.FieldValue.serverTimestamp()
-            });
+            if (!db || !auth || !auth.currentUser || !matchId) return;
+            try {
+                const ref = db.doc(`artifacts/${appId}/public/data/matches/${matchId}`);
+                await ref.update({
+                    board: JSON.stringify(boardState),
+                    scores,
+                    currentPlayer,
+                    timerSeconds,
+                    gameOver,
+                    lastUpdate: firebase.firestore.FieldValue.serverTimestamp()
+                });
+            } catch(e) {}
         }
 
         window.hostGame = async function() {
-            if (!isOnline) return;
+            if (!db) {
+                alert("Server connecting... Please wait or refresh.");
+                tryConnectFirebase();
+                return;
+            }
             const code = Math.random().toString(36).substring(2, 8).toUpperCase();
             document.getElementById('mp-initial').classList.add('hidden');
             document.getElementById('mp-waiting').classList.remove('hidden');
@@ -555,21 +583,27 @@
                 });
                 matchId = code; myPlayerNum = 1;
                 listenToMatch(code);
-            } catch (err) { cancelMultiplayer(); }
+            } catch (err) { 
+                console.error(err);
+                cancelMultiplayer(); 
+                alert("Could not create match. Try again.");
+            }
         };
 
         window.joinGame = async function() {
-            if (!isOnline) return;
-            const code = document.getElementById('join-code').value.trim().toUpperCase();
-            if (code.length !== 6) return;
+            if (!db) return alert("Server not ready.");
+            const codeInput = document.getElementById('join-code');
+            const code = codeInput.value.trim().toUpperCase();
+            if (code.length !== 6) return alert("Enter 6-digit code");
+            
             const ref = db.doc(`artifacts/${appId}/public/data/matches/${code}`);
             try {
                 const snap = await ref.get();
-                if (!snap.exists) return alert("Code not found");
+                if (!snap.exists) return alert("Code not found. Host must create match first.");
                 await ref.set({ status: 'active', lastJoined: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
                 matchId = code; myPlayerNum = 2;
                 listenToMatch(code);
-            } catch (err) { alert("Join failed"); }
+            } catch (err) { alert("Join failed. Check code."); }
         };
 
         function listenToMatch(code) {
@@ -577,8 +611,16 @@
             unsubscribeMatch = db.doc(`artifacts/${appId}/public/data/matches/${code}`).onSnapshot(doc => {
                 const data = doc.data();
                 if (!data) return;
-                if (data.status === 'active') { closeModal(); document.getElementById('find-online-btn').disabled = true; }
+                
+                // Close modal if someone joins
+                if (data.status === 'active' && document.getElementById('multiplayer-modal').style.display === 'flex') { 
+                    closeModal(); 
+                    document.getElementById('find-online-btn').disabled = true; 
+                }
+                
                 if (data.gameOver && !gameOver) { scores = data.scores; endGame("Game Ended Online"); }
+                
+                // Only sync local state if it's the OTHER player's turn or initial join
                 if (data.currentPlayer !== myPlayerNum) {
                     boardState = JSON.parse(data.board);
                     scores = data.scores;
@@ -587,6 +629,8 @@
                     updateTimerDisplay();
                     render();
                 }
+            }, err => {
+                console.error("Snapshot error:", err);
             });
         }
 
@@ -599,7 +643,13 @@
 
         window.openMultiplayerModal = () => document.getElementById('multiplayer-modal').style.display = 'flex';
         window.closeModal = () => document.getElementById('multiplayer-modal').style.display = 'none';
-        window.cancelMultiplayer = () => { if(unsubscribeMatch) unsubscribeMatch(); matchId = null; closeModal(); };
+        window.cancelMultiplayer = () => { 
+            if(unsubscribeMatch) unsubscribeMatch(); 
+            matchId = null; 
+            document.getElementById('mp-waiting').classList.add('hidden');
+            document.getElementById('mp-initial').classList.remove('hidden');
+            closeModal(); 
+        };
     </script>
 </body>
 </html>
