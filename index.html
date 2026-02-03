@@ -180,12 +180,13 @@
          * 5. Enable "Cloud Firestore" and set rules to allow read/write.
          */
         const MANUAL_FIREBASE_CONFIG = {
-            apiKey: "YOUR_API_KEY",
-            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-            projectId: "YOUR_PROJECT_ID",
-            storageBucket: "YOUR_PROJECT_ID.appspot.com",
-            messagingSenderId: "YOUR_SENDER_ID",
-            appId: "YOUR_APP_ID"
+            apiKey: "AIzaSyA-_jkxLGS255XbhxYIm3WxS3wVOeD-cXE",
+            authDomain: "tournament-damath.firebaseapp.com",
+            projectId: "tournament-damath",
+            storageBucket: "tournament-damath.firebasestorage.app",
+            messagingSenderId: "994042280890",
+            appId: "1:994042280890:web:78cf36127de438f731bb83",
+            measurementId: "G-ER585Y49RN"
         };
 
         // Global State
@@ -239,7 +240,7 @@
             let config = null;
             if (typeof __firebase_config !== 'undefined' && __firebase_config) {
                 config = JSON.parse(__firebase_config);
-            } else if (MANUAL_FIREBASE_CONFIG.apiKey !== "YOUR_API_KEY") {
+            } else if (MANUAL_FIREBASE_CONFIG.apiKey && MANUAL_FIREBASE_CONFIG.apiKey !== "YOUR_API_KEY") {
                 config = MANUAL_FIREBASE_CONFIG;
             }
 
@@ -309,12 +310,16 @@
             ti.innerText = `${currentPlayer === 1 ? "Blue" : "Red"}'s Turn`;
             if (currentPlayer === 1) {
                 ti.className = "w-full bg-blue-500 text-white py-4 rounded-2xl font-black uppercase text-xs tracking-[0.2em]";
-                card1.classList.add('active', 'border-blue-400');
-                card2.classList.remove('active', 'border-red-400');
+                card1.classList.add('active');
+                card1.classList.add('border-blue-400');
+                card2.classList.remove('active');
+                card2.classList.remove('border-red-400');
             } else {
                 ti.className = "w-full bg-red-500 text-white py-4 rounded-2xl font-black uppercase text-xs tracking-[0.2em]";
-                card2.classList.add('active', 'border-red-400');
-                card1.classList.remove('active', 'border-blue-400');
+                card2.classList.add('active');
+                card2.classList.add('border-red-400');
+                card1.classList.remove('active');
+                card1.classList.remove('border-blue-400');
             }
         }
 
