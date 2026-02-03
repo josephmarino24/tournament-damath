@@ -203,7 +203,8 @@
         async function tryConnectFirebase() {
             const statusText = document.getElementById('mp-status');
 
-            if (typeof __firebase_config !== 'undefined') {
+            // Explicitly check for configuration availability in the environment
+            if (typeof __firebase_config !== 'undefined' && __firebase_config) {
                 try {
                     const config = JSON.parse(__firebase_config);
                     if (!firebase.apps.length) firebase.initializeApp(config);
@@ -212,12 +213,15 @@
                     
                     statusText.innerText = "Authenticating with server...";
                     
-                    // Priority 1: Auth Token
-                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                        await auth.signInWithCustomToken(__initial_auth_token).catch(() => auth.signInAnonymously());
-                    } else {
-                        await auth.signInAnonymously();
-                    }
+                    const initAuth = async () => {
+                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                            await auth.signInWithCustomToken(__initial_auth_token);
+                        } else {
+                            await auth.signInAnonymously();
+                        }
+                    };
+
+                    await initAuth();
 
                     auth.onAuthStateChanged((user) => {
                         if (user) {
@@ -227,11 +231,11 @@
                         }
                     });
                 } catch (e) {
-                    console.error("Firebase Error:", e);
-                    statusText.innerText = "Connection Failed. Refresh or play Local.";
+                    console.error("Firebase Connection Error:", e);
+                    statusText.innerText = "Connection Error. Playing Local Mode.";
                 }
             } else {
-                statusText.innerText = "Local Environment (No Firebase)";
+                statusText.innerText = "Offline Mode: Multiplayer unavailable.";
             }
         }
 
@@ -330,6 +334,7 @@
 
         async function syncOnline() {
             if (!db || !auth.currentUser) return;
+            // RULE 1: Strict Paths
             const ref = db.doc(`artifacts/${appId}/public/data/matches/${matchId}`);
             await ref.update({
                 board: JSON.stringify(boardState),
@@ -340,7 +345,9 @@
         }
 
         window.hostGame = async function() {
-            if (!isOnline && !auth.currentUser) return alert("Still connecting to server... Please wait a few seconds.");
+            if (!isOnline && (!auth || !auth.currentUser)) {
+                return alert("Connection to server is not ready yet. Please ensure you are in an online environment.");
+            }
             const code = Math.floor(100000 + Math.random() * 900000).toString();
             matchId = code; 
             myPlayerNum = 1;
@@ -349,6 +356,7 @@
             document.getElementById('display-code').innerText = code;
             
             try {
+                // RULE 1: Strict Paths
                 await db.doc(`artifacts/${appId}/public/data/matches/${code}`).set({
                     board: JSON.stringify(boardState), 
                     scores, 
@@ -359,16 +367,18 @@
                 });
                 listenToMatch(code);
             } catch (err) {
+                console.error("Hosting failed:", err);
                 alert("Failed to host game. Please try again.");
                 cancelMultiplayer();
             }
         };
 
         window.joinGame = async function() {
-            if (!isOnline && !auth.currentUser) return alert("Still connecting... Please wait.");
+            if (!isOnline && (!auth || !auth.currentUser)) return alert("Still connecting... Please wait.");
             const code = document.getElementById('join-code').value.trim();
             if (code.length !== 6) return alert("Please enter a 6-digit code.");
             
+            // RULE 1: Strict Paths
             const ref = db.doc(`artifacts/${appId}/public/data/matches/${code}`);
             try {
                 const snap = await ref.get();
@@ -388,6 +398,7 @@
 
         function listenToMatch(code) {
             if (unsubscribeMatch) unsubscribeMatch();
+            // RULE 1: Strict Paths
             unsubscribeMatch = db.doc(`artifacts/${appId}/public/data/matches/${code}`).onSnapshot(doc => {
                 const data = doc.data();
                 if (!data) return;
@@ -396,7 +407,7 @@
                     document.getElementById('multiplayer-modal').style.display = 'none';
                 }
                 
-                if (data.currentPlayer === myPlayerNum) {
+                if (data.currentPlayer === myPlayerNum || data.status === 'active') {
                     boardState = JSON.parse(data.board);
                     scores = data.scores;
                     currentPlayer = data.currentPlayer;
