@@ -171,7 +171,11 @@
     </div>
 
     <script>
-        // Replace with your actual Firebase config from the Firebase Console
+        /**
+         * ACTION REQUIRED: 
+         * Replace the object below with your actual Firebase configuration 
+         * from the Firebase Console (Project Settings > General > Your Apps)
+         */
         const MANUAL_FIREBASE_CONFIG = {
             apiKey: "AIzaSyA-_jkxLGS255XbhxYIm3WxS3wVOeD-cXE",
             authDomain: "tournament-damath.firebaseapp.com",
@@ -446,7 +450,6 @@
                 }
                 
                 // Only update our local state if it's the other player's turn or the game just started
-                // This prevents "flickering" when we make a move ourselves
                 if (data.currentPlayer !== myPlayerNum || data.status === 'active') {
                     boardState = JSON.parse(data.board);
                     scores = data.scores;
