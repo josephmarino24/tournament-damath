@@ -16,8 +16,9 @@
             width: 100%;
             max-width: 600px;
             aspect-ratio: 1/1;
-            border: 4px solid #333;
-            background-color: #333;
+            border: 12px solid #1e293b;
+            background-color: #1e293b;
+            border-radius: 12px;
         }
         .cell {
             position: relative;
@@ -29,123 +30,156 @@
             cursor: pointer;
             user-select: none;
         }
-        .cell.dark { background-color: #769656; color: rgba(255,255,255,0.4); }
-        .cell.light { background-color: #eeeed2; color: rgba(0,0,0,0.1); }
+        .cell.dark { background-color: #2d5a27; color: rgba(255,255,255,0.2); }
+        .cell.light { background-color: #f0f0d8; color: rgba(0,0,0,0.1); }
         
         .pitsa {
-            width: 80%;
-            height: 80%;
+            width: 82%;
+            height: 82%;
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.2rem;
+            font-size: 1.3rem;
+            font-weight: 800;
             color: white;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            box-shadow: 0 4px 0 rgba(0,0,0,0.3), inset 0 2px 4px rgba(255,255,255,0.3);
             z-index: 10;
-            transition: transform 0.15s ease-out;
+            transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
             position: relative;
         }
-        .pitsa.blue { background: radial-gradient(circle, #3b82f6, #1d4ed8); border: 2px solid #1e3a8a; }
-        .pitsa.red { background: radial-gradient(circle, #ef4444, #b91c1c); border: 2px solid #7f1d1d; }
-        .pitsa.selected { transform: scale(1.1); border: 3px solid #fbbf24; box-shadow: 0 0 15px #fbbf24; }
+        .pitsa.blue { background: radial-gradient(circle at 30% 30%, #3b82f6, #1d4ed8); border: 2px solid #1e3a8a; }
+        .pitsa.red { background: radial-gradient(circle at 30% 30%, #ef4444, #b91c1c); border: 2px solid #7f1d1d; }
+        .pitsa.selected { transform: scale(1.1) translateY(-4px); border: 3px solid #fbbf24; box-shadow: 0 8px 15px rgba(251, 191, 36, 0.4); }
         .pitsa.dama::after { 
             content: '★'; 
             position: absolute; 
-            top: -10px; 
+            top: -2px; 
             right: -2px;
             color: #fbbf24; 
-            font-size: 1.4rem; 
-            text-shadow: 1px 1px 2px black; 
+            font-size: 1.2rem; 
+            text-shadow: 0 0 3px black; 
         }
 
         #multiplayer-modal {
             display: none;
             position: fixed;
             inset: 0;
-            background: rgba(0,0,0,0.8);
+            background: rgba(15, 23, 42, 0.9);
+            backdrop-filter: blur(4px);
             z-index: 200;
             align-items: center;
             justify-content: center;
         }
+
+        .score-card {
+            transition: transform 0.3s ease;
+        }
+        .score-card.active {
+            transform: scale(1.02);
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
     </style>
 </head>
-<body class="bg-slate-100 min-h-screen flex flex-col items-center p-4 font-sans">
+<body class="bg-slate-50 min-h-screen flex flex-col items-center p-4 lg:p-10 font-sans text-slate-900">
 
     <!-- Multiplayer Modal -->
     <div id="multiplayer-modal">
-        <div class="bg-white p-8 rounded-2xl shadow-2xl max-w-sm w-full mx-4">
-            <h2 class="text-2xl font-black mb-4">Play Online</h2>
+        <div class="bg-white p-8 rounded-3xl shadow-2xl max-w-sm w-full mx-4 border border-slate-200">
+            <h2 class="text-3xl font-black mb-1 text-slate-800 tracking-tight text-center">Play Online</h2>
+            <p id="mp-status" class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-6 text-center">Checking Connection...</p>
+            
             <div id="mp-initial">
-                <p class="text-xs text-gray-500 mb-4" id="mp-status">Connecting to server...</p>
-                
-                <button id="host-btn" onclick="hostGame()" class="w-full bg-blue-600 text-white py-3 rounded-xl font-bold mb-3 hover:bg-blue-700 transition">Host New Match</button>
-                <div class="relative flex py-5 items-center">
-                    <div class="flex-grow border-t border-gray-300"></div>
-                    <span class="flex-shrink mx-4 text-gray-400 text-xs font-bold">OR</span>
-                    <div class="flex-grow border-t border-gray-300"></div>
+                <button id="host-btn" onclick="hostGame()" class="w-full bg-blue-600 text-white py-4 rounded-2xl font-black mb-3 hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 active:scale-95">Host New Match</button>
+                <div class="relative flex py-6 items-center">
+                    <div class="flex-grow border-t border-slate-100"></div>
+                    <span class="flex-shrink mx-4 text-slate-300 text-[10px] font-black uppercase">Or Join</span>
+                    <div class="flex-grow border-t border-slate-100"></div>
                 </div>
-                <input type="text" id="join-code" placeholder="Enter 6-digit code" class="w-full p-3 border rounded-xl mb-3 text-center font-mono text-xl tracking-widest" maxlength="6">
-                <button id="join-btn" onclick="joinGame()" class="w-full bg-slate-800 text-white py-3 rounded-xl font-bold hover:bg-slate-700 transition">Join Match</button>
+                <input type="text" id="join-code" placeholder="6-digit code" class="w-full p-4 border-2 border-slate-100 rounded-2xl mb-4 text-center font-mono text-2xl tracking-widest focus:border-blue-500 focus:outline-none transition-colors uppercase" maxlength="6">
+                <button id="join-btn" onclick="joinGame()" class="w-full bg-slate-800 text-white py-4 rounded-2xl font-black hover:bg-slate-700 transition-all active:scale-95">Join Match</button>
             </div>
-            <div id="mp-waiting" class="hidden text-center">
-                <p class="text-gray-500 mb-2">Match Code:</p>
-                <h3 id="display-code" class="text-4xl font-mono font-black text-blue-600 mb-4 tracking-tighter">------</h3>
-                <p class="text-xs text-gray-400 animate-pulse">Waiting for opponent...</p>
-                <button onclick="cancelMultiplayer()" class="mt-6 text-red-500 font-bold text-sm">Cancel</button>
+            
+            <div id="mp-waiting" class="hidden text-center py-4">
+                <p class="text-slate-500 text-sm font-medium mb-2">Share code with opponent:</p>
+                <div class="bg-slate-50 rounded-2xl py-6 mb-6">
+                    <h3 id="display-code" class="text-5xl font-mono font-black text-blue-600 tracking-tighter uppercase">------</h3>
+                </div>
+                <div class="flex items-center justify-center space-x-2 text-blue-500">
+                    <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
+                    <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
+                    <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                </div>
+                <button onclick="cancelMultiplayer()" class="mt-8 text-red-500 font-black text-xs uppercase tracking-widest hover:text-red-600">Cancel Match</button>
             </div>
-            <button onclick="closeModal()" class="w-full mt-4 text-gray-400 text-xs uppercase font-bold tracking-widest">Close</button>
+            
+            <button onclick="closeModal()" class="w-full mt-6 text-slate-300 text-[10px] uppercase font-black tracking-[0.2em] hover:text-slate-500 transition-colors">Close</button>
         </div>
     </div>
 
-    <div class="max-w-4xl w-full grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div class="bg-white p-6 rounded-xl shadow-md h-fit border border-slate-200">
-            <h1 class="text-3xl font-black text-blue-600 mb-4 tracking-tighter">DAMATH</h1>
-            
-            <div class="space-y-4">
-                <div class="p-3 rounded-lg bg-blue-50 border-l-4 border-blue-500">
-                    <p class="text-[10px] font-bold text-blue-800 uppercase">Blue Score</p>
-                    <p id="score1" class="text-3xl font-mono font-bold">0</p>
+    <div class="max-w-6xl w-full grid grid-cols-1 lg:grid-cols-12 gap-10">
+        <!-- Side Panel -->
+        <div class="lg:col-span-4 flex flex-col gap-6">
+            <div class="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-200">
+                <h1 class="text-5xl font-black text-slate-900 mb-8 tracking-tighter">DAMATH</h1>
+                
+                <div class="space-y-4">
+                    <div id="card1" class="score-card p-5 rounded-2xl bg-blue-50 border-2 border-blue-200 flex justify-between items-center active">
+                        <div>
+                            <p class="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1">Blue Player</p>
+                            <p id="score1" class="text-4xl font-mono font-black text-blue-900">0</p>
+                        </div>
+                        <div class="w-10 h-10 rounded-full bg-blue-600 border-4 border-blue-200"></div>
+                    </div>
+                    
+                    <div id="card2" class="score-card p-5 rounded-2xl bg-red-50 border-2 border-red-100 flex justify-between items-center">
+                        <div>
+                            <p class="text-[10px] font-black text-red-500 uppercase tracking-widest mb-1">Red Player</p>
+                            <p id="score2" class="text-4xl font-mono font-black text-red-900">0</p>
+                        </div>
+                        <div class="w-10 h-10 rounded-full bg-red-600 border-4 border-red-200"></div>
+                    </div>
                 </div>
-                <div class="p-3 rounded-lg bg-red-50 border-l-4 border-red-500">
-                    <p class="text-[10px] font-bold text-red-800 uppercase">Red Score</p>
-                    <p id="score2" class="text-3xl font-mono font-bold">0</p>
-                </div>
-            </div>
 
-            <div class="mt-6 space-y-3">
-                <button onclick="openMultiplayerModal()" class="w-full bg-indigo-600 text-white py-4 rounded-lg font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition">
-                    Find Online Match
-                </button>
+                <div class="mt-10 space-y-3">
+                    <button id="find-online-btn" onclick="openMultiplayerModal()" class="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all active:scale-95 text-sm uppercase tracking-widest">
+                        Online Multiplayer
+                    </button>
+                    <button id="turn-indicator" class="w-full bg-blue-500 text-white py-4 rounded-2xl font-black uppercase text-xs tracking-[0.2em] cursor-default transition-all">
+                        Blue's Turn
+                    </button>
+                    <button onclick="resetLocalGame()" class="w-full bg-white text-slate-400 py-3 rounded-2xl font-bold text-xs uppercase tracking-widest hover:text-slate-600 transition-colors">
+                        Reset Board
+                    </button>
+                </div>
             </div>
             
-            <p id="turn-indicator" class="mt-4 text-center font-bold py-2 rounded bg-blue-100 text-blue-800 uppercase text-xs tracking-widest">
-                Blue's Turn
-            </p>
+            <div class="bg-slate-900 p-6 rounded-[2rem] text-white">
+                <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">System Status</p>
+                <p id="match-status-text" class="text-xs font-medium text-slate-400 leading-relaxed">
+                    Offline mode enabled. You can play locally on this device. Use Online Multiplayer to invite a friend.
+                </p>
+            </div>
         </div>
 
-        <div class="md:col-span-2">
-            <div id="board" class="board-grid shadow-2xl rounded-lg overflow-hidden mx-auto border-8 border-slate-800">
+        <!-- Board Area -->
+        <div class="lg:col-span-8 flex flex-col items-center">
+            <div id="board" class="board-grid shadow-2xl">
                 <!-- Board generated by JS -->
-            </div>
-            
-            <div class="mt-6 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-                <p class="text-[10px] font-bold text-gray-400 uppercase mb-2">Game Status</p>
-                <p id="match-status-text" class="text-xs font-mono text-gray-500">No active online match. Host or Join to begin.</p>
             </div>
         </div>
     </div>
 
     <script>
         // Global State
-        let db, auth, appId = typeof __app_id !== 'undefined' ? __app_id : 'damath-v1';
+        let db, auth, appId = typeof __app_id !== 'undefined' ? __app_id : 'tournament-damath-v1';
         let boardState = [];
         let currentPlayer = 1;
         let scores = { 1: 0, 2: 0 };
         let selectedPiece = null;
         let validMoves = [];
         let matchId = null;
-        let myPlayerNum = null;
+        let myPlayerNum = null; // null means local play
         let unsubscribeMatch = null;
         let isOnline = false;
 
@@ -183,7 +217,6 @@
 
         async function tryConnectFirebase() {
             const statusText = document.getElementById('mp-status');
-
             if (typeof __firebase_config !== 'undefined' && __firebase_config) {
                 try {
                     const config = JSON.parse(__firebase_config);
@@ -192,31 +225,24 @@
                     db = firebase.firestore();
                     
                     statusText.innerText = "Authenticating...";
-                    
-                    const performAuth = async () => {
-                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                            await auth.signInWithCustomToken(__initial_auth_token);
-                        } else {
-                            await auth.signInAnonymously();
-                        }
-                    };
-
-                    await performAuth();
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await auth.signInWithCustomToken(__initial_auth_token);
+                    } else {
+                        await auth.signInAnonymously();
+                    }
 
                     auth.onAuthStateChanged((user) => {
                         if (user) {
                             isOnline = true;
-                            statusText.innerText = "Online - Connected";
-                            statusText.className = "text-xs text-green-600 mb-4 font-bold";
+                            statusText.innerText = "Connected - Online";
+                            statusText.className = "text-[10px] font-bold uppercase tracking-widest text-green-500 mb-6 text-center";
                         }
                     });
                 } catch (e) {
-                    console.error("Firebase Connection Error:", e);
-                    statusText.innerText = "Offline Mode - Server Error";
+                    statusText.innerText = "Offline Mode - Config Missing";
                 }
             } else {
-                statusText.innerText = "Initialising connection...";
-                setTimeout(tryConnectFirebase, 1000);
+                statusText.innerText = "Waiting for Cloud Config...";
             }
         }
 
@@ -249,13 +275,26 @@
             }
             document.getElementById('score1').innerText = scores[1];
             document.getElementById('score2').innerText = scores[2];
+            
             const ti = document.getElementById('turn-indicator');
+            const card1 = document.getElementById('card1');
+            const card2 = document.getElementById('card2');
+            
             ti.innerText = `${currentPlayer === 1 ? "Blue" : "Red"}'s Turn`;
-            ti.className = `mt-4 text-center font-bold py-2 rounded uppercase text-xs tracking-widest ${currentPlayer === 1 ? 'bg-blue-100 text-blue-800' : 'bg-red-100 text-red-800'}`;
+            if (currentPlayer === 1) {
+                ti.className = "w-full bg-blue-500 text-white py-4 rounded-2xl font-black uppercase text-xs tracking-[0.2em]";
+                card1.classList.add('active', 'border-blue-400');
+                card2.classList.remove('active', 'border-red-400');
+            } else {
+                ti.className = "w-full bg-red-500 text-white py-4 rounded-2xl font-black uppercase text-xs tracking-[0.2em]";
+                card2.classList.add('active', 'border-red-400');
+                card1.classList.remove('active', 'border-blue-400');
+            }
         }
 
         function handleCellClick(r, c) {
-            if (!matchId || currentPlayer !== myPlayerNum) return;
+            // If online, only allow move if it's my turn
+            if (matchId && myPlayerNum !== null && currentPlayer !== myPlayerNum) return;
             
             const piece = boardState[r][c];
             if (piece && piece.player === currentPlayer) {
@@ -325,8 +364,8 @@
         }
 
         window.hostGame = async function() {
-            if (!isOnline) return alert("Waiting for server connection...");
-            const code = Math.floor(100000 + Math.random() * 900000).toString();
+            if (!isOnline) return alert("Still connecting to server... Please wait a moment.");
+            const code = Math.random().toString(36).substring(2, 8).toUpperCase();
             
             document.getElementById('mp-initial').classList.add('hidden');
             document.getElementById('mp-waiting').classList.remove('hidden');
@@ -350,14 +389,13 @@
                 myPlayerNum = 1;
                 listenToMatch(code);
             } catch (err) {
-                console.error("Hosting failed:", err);
                 cancelMultiplayer();
             }
         };
 
         window.joinGame = async function() {
-            if (!isOnline) return alert("Waiting for server connection...");
-            const code = document.getElementById('join-code').value.trim();
+            if (!isOnline) return alert("Still connecting to server...");
+            const code = document.getElementById('join-code').value.trim().toUpperCase();
             if (code.length !== 6) return alert("Enter 6-digit code.");
             
             const ref = db.doc(`artifacts/${appId}/public/data/matches/${code}`);
@@ -384,8 +422,10 @@
                 if (!data) return;
                 
                 if (data.status === 'active') {
-                    document.getElementById('multiplayer-modal').style.display = 'none';
-                    document.getElementById('match-status-text').innerText = `Online Match Active: ${matchId} | You are ${myPlayerNum === 1 ? 'Blue' : 'Red'}`;
+                    closeModal();
+                    document.getElementById('match-status-text').innerText = `LIVE MATCH: ${matchId} | Playing as ${myPlayerNum === 1 ? 'Blue' : 'Red'}`;
+                    document.getElementById('find-online-btn').innerText = "Match in Progress";
+                    document.getElementById('find-online-btn').disabled = true;
                 }
                 
                 if (data.currentPlayer === myPlayerNum || data.status === 'active') {
@@ -399,6 +439,17 @@
             });
         }
 
+        function resetLocalGame() {
+            matchId = null;
+            myPlayerNum = null;
+            currentPlayer = 1;
+            scores = { 1: 0, 2: 0 };
+            document.getElementById('match-status-text').innerText = "Offline mode active. Playing locally.";
+            document.getElementById('find-online-btn').innerText = "Online Multiplayer";
+            document.getElementById('find-online-btn').disabled = false;
+            initBoard();
+        }
+
         window.openMultiplayerModal = () => document.getElementById('multiplayer-modal').style.display = 'flex';
         window.closeModal = () => document.getElementById('multiplayer-modal').style.display = 'none';
         window.cancelMultiplayer = () => { 
@@ -406,7 +457,7 @@
             matchId = null; 
             document.getElementById('mp-initial').classList.remove('hidden');
             document.getElementById('mp-waiting').classList.add('hidden');
-            document.getElementById('match-status-text').innerText = "No active online match.";
+            document.getElementById('match-status-text').innerText = "Offline mode active.";
             closeModal(); 
         };
     </script>
