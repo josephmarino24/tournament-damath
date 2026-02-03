@@ -148,7 +148,7 @@
                 <div class="flex justify-between items-start mb-6">
                     <h1 class="text-5xl font-black text-slate-900 tracking-tighter">DAMATH</h1>
                     <div class="bg-slate-900 text-white px-4 py-2 rounded-xl text-center min-w-[100px]">
-                        <p id="timer-label" class="text-[8px] font-black uppercase tracking-widest text-slate-400">Waiting...</p>
+                        <p id="timer-label" class="text-[8px] font-black uppercase tracking-widest text-slate-400">Time Left</p>
                         <p id="timer" class="text-xl font-mono font-black">20:00</p>
                     </div>
                 </div>
@@ -187,7 +187,7 @@
             <div class="bg-slate-900 p-6 rounded-[2rem] text-white">
                 <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">System Status</p>
                 <p id="match-status-text" class="text-xs font-medium text-slate-400 leading-relaxed">
-                    Rules: 20m timer starts on first move. Integers (positive/negative) enabled. Force capture active.
+                    Rules: 20m match duration. Integers (positive/negative) enabled. Force capture active.
                 </p>
             </div>
         </div>
@@ -223,7 +223,6 @@
         let isOnline = false;
         let timerSeconds = 1200; 
         let timerInterval = null;
-        let timerRunning = false;
         let mustCaptureAgain = null; 
         let gameOver = false;
 
@@ -244,9 +243,6 @@
         };
 
         function startTimer() {
-            if (timerRunning) return;
-            timerRunning = true;
-            document.getElementById('timer-label').innerText = "Time Left";
             if (timerInterval) clearInterval(timerInterval);
             timerInterval = setInterval(() => {
                 if (gameOver) return;
@@ -266,11 +262,9 @@
 
         function initBoard() {
             gameOver = false;
-            timerRunning = false;
             timerSeconds = 1200;
             updateTimerDisplay();
-            document.getElementById('timer-label').innerText = "Waiting...";
-            if (timerInterval) clearInterval(timerInterval);
+            startTimer(); // Timer starts immediately
 
             boardState = Array(8).fill(null).map(() => Array(8).fill(null));
             
@@ -452,9 +446,6 @@
         }
 
         function executeMove(fR, fC, tR, tC, capture) {
-            // Start timer on first move
-            if (!timerRunning) startTimer();
-
             const piece = boardState[fR][fC];
             if (capture) {
                 const capturedPiece = boardState[capture.r][capture.c];
@@ -539,7 +530,6 @@
                 scores,
                 currentPlayer,
                 timerSeconds,
-                timerRunning,
                 gameOver,
                 lastUpdate: firebase.firestore.FieldValue.serverTimestamp()
             });
@@ -560,7 +550,6 @@
                     scores, 
                     currentPlayer, 
                     timerSeconds: 1200,
-                    timerRunning: false,
                     status: 'waiting',
                     createdAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
@@ -590,7 +579,6 @@
                 if (!data) return;
                 if (data.status === 'active') { closeModal(); document.getElementById('find-online-btn').disabled = true; }
                 if (data.gameOver && !gameOver) { scores = data.scores; endGame("Game Ended Online"); }
-                if (data.timerRunning && !timerRunning) startTimer();
                 if (data.currentPlayer !== myPlayerNum) {
                     boardState = JSON.parse(data.board);
                     scores = data.scores;
