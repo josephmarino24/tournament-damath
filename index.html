@@ -81,7 +81,7 @@
                 <button onclick="cancelMultiplayer()" class="text-red-500 font-bold text-xs uppercase">Cancel</button>
             </div>
             
-            <button onclick="closeModal()" class="w-full mt-6 text-slate-400 text-[10px] uppercase font-black tracking-widest">Play Offline Instead</button>
+            <button onclick="skipConnection()" class="w-full mt-6 text-slate-400 text-[10px] uppercase font-black tracking-widest hover:text-blue-500 transition-colors">⚠️ Play Offline (Skip Server)</button>
         </div>
     </div>
 
@@ -89,7 +89,7 @@
         <div class="flex flex-col md:flex-row justify-between items-center bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200">
             <div class="flex items-center gap-4">
                 <h1 class="text-4xl font-black text-slate-900 tracking-tighter">DAMATH</h1>
-                <div id="connection-pill" class="px-3 py-1 bg-slate-100 text-slate-500 text-[10px] font-black rounded-full uppercase">Offline</div>
+                <div id="connection-pill" class="px-3 py-1 bg-slate-100 text-slate-500 text-[10px] font-black rounded-full uppercase">Checking...</div>
             </div>
             
             <div class="flex gap-4 mt-4 md:mt-0">
@@ -118,7 +118,7 @@
                 </div>
                 
                 <button onclick="openModal()" id="online-btn" class="w-full bg-indigo-600 text-white py-5 rounded-[2rem] font-black hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all active:scale-95 text-sm uppercase tracking-widest">
-                    Play Online
+                    Multiplayer
                 </button>
 
                 <button onclick="resetGame()" class="w-full bg-white text-slate-400 py-4 rounded-[2rem] border border-slate-200 font-bold text-xs uppercase hover:bg-slate-50">
@@ -164,16 +164,29 @@
 
         window.onload = () => {
             initGame();
-            if (firebaseConfig) connectFirebase();
-            // Auto-fallback for "Server Connecting" hang
+            if (firebaseConfig) {
+                connectFirebase();
+            } else {
+                setOffline();
+            }
+            
+            // Auto-fallback timer
             setTimeout(() => {
                 if (!isOnline) {
-                    const status = document.getElementById('mp-status');
-                    status.innerText = "Server Unreachable - Local Mode Active";
-                    status.className = "text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-6 text-center";
+                    setOffline();
                 }
-            }, 3000);
+            }, 5000);
         };
+
+        function setOffline() {
+            const status = document.getElementById('mp-status');
+            status.innerText = "Offline Mode Active";
+            status.className = "text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-6 text-center";
+            const pill = document.getElementById('connection-pill');
+            pill.innerText = "Offline";
+            pill.className = "px-3 py-1 bg-slate-100 text-slate-500 text-[10px] font-black rounded-full uppercase";
+            isOnline = false;
+        }
 
         async function connectFirebase() {
             try {
@@ -198,7 +211,13 @@
                 document.getElementById('mp-status').className = "text-[10px] font-bold uppercase tracking-widest text-green-500 mb-6 text-center";
             } catch (e) {
                 console.error("Firebase connection failed", e);
+                setOffline();
             }
+        }
+
+        function skipConnection() {
+            setOffline();
+            closeModal();
         }
 
         function initGame() {
@@ -311,7 +330,7 @@
                     board: JSON.stringify(boardState),
                     scores,
                     currentPlayer
-                });
+                }).catch(e => console.warn("Update skipped (offline/local)"));
             }
             render();
         }
@@ -354,7 +373,7 @@
         window.closeModal = () => document.getElementById('multiplayer-modal').style.display = 'none';
         
         async function hostGame() {
-            if (!isOnline) return alert("Offline mode active. Check your connection.");
+            if (!isOnline) return alert("You are currently in Offline Mode. Please refresh to try reconnecting to the server.");
             const code = Math.random().toString(36).substring(2, 8).toUpperCase();
             matchId = code; myPlayerNum = 1;
             document.getElementById('mp-controls').classList.add('hidden');
@@ -370,6 +389,7 @@
         }
 
         async function joinGame() {
+            if (!isOnline) return alert("You are currently in Offline Mode.");
             const code = document.getElementById('join-code').value.toUpperCase();
             if (code.length !== 6) return;
             matchId = code; myPlayerNum = 2;
@@ -392,7 +412,13 @@
             });
         }
         
-        function resetGame() { location.reload(); }
+        function resetGame() { 
+            if (matchId) {
+                location.reload(); 
+            } else {
+                initGame();
+            }
+        }
         function cancelMultiplayer() { location.reload(); }
     </script>
 </body>
