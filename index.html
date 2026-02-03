@@ -185,9 +185,7 @@
                     <div id="status-dot" class="w-2 h-2 rounded-full bg-slate-600"></div>
                 </div>
                 <div id="match-status-text" class="text-xs font-medium text-slate-400 leading-relaxed space-y-2">
-                    <p>• Game: Local Match</p>
-                    <p>• Rules: Integers / Force Capture</p>
-                    <p>• Duration: 20 Minutes</p>
+                    <!-- Dynamic updates via JS -->
                 </div>
             </div>
         </div>
@@ -201,7 +199,7 @@
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'tournament-damath-v2';
         
         const DEFAULT_CONFIG = {
-            apiKey: "AIzaSyA-_jkxLGS255XbhxYIm3WxS3wVOeD-cXE",
+            apiKey: "", // Key provided by environment
             authDomain: "tournament-damath.firebaseapp.com",
             projectId: "tournament-damath",
             storageBucket: "tournament-damath.firebasestorage.app",
@@ -244,6 +242,7 @@
         async function tryConnectFirebase() {
             const statusText = document.getElementById('mp-status');
             try {
+                if (typeof firebase === 'undefined') return;
                 if (!firebase.apps.length) firebase.initializeApp(DEFAULT_CONFIG);
                 auth = firebase.auth();
                 db = firebase.firestore();
@@ -272,19 +271,20 @@
 
         function updateSystemStatus() {
             const container = document.getElementById('match-status-text');
-            const myColor = myPlayerNum === 1 ? '<span class="text-blue-400">BLUE</span>' : '<span class="text-red-400">RED</span>';
+            const myColor = myPlayerNum === 1 ? '<span class="text-blue-400">BLUE</span>' : (myPlayerNum === 2 ? '<span class="text-red-400">RED</span>' : 'Spectator');
             
             if (matchId) {
                 container.innerHTML = `
                     <p class="text-green-400 font-bold tracking-widest">• ONLINE MATCH: ${matchId}</p>
                     <p>• Your Role: ${myColor}</p>
-                    <p>• Opponent: Connected</p>
-                    <p>• Integers / Force Capture</p>
+                    <p>• Dama: Infinite Range</p>
+                    <p>• Scoring: Dama x2 | Dama-vs-Dama x4</p>
                 `;
             } else {
                 container.innerHTML = `
                     <p>• Game: Local Match</p>
-                    <p>• Rules: Integers / Force Capture</p>
+                    <p>• Dama: Infinite Range</p>
+                    <p>• Scoring: Dama x2 | Dama-vs-Dama x4</p>
                     <p>• Mode: Multi-Touch Friendly</p>
                 `;
             }
@@ -301,8 +301,8 @@
         }
 
         function updateTimerDisplay() {
-            const m = Math.floor(timerSeconds / 60);
-            const s = timerSeconds % 60;
+            const m = Math.max(0, Math.floor(timerSeconds / 60));
+            const s = Math.max(0, timerSeconds % 60);
             document.getElementById('timer').innerText = `${m}:${s.toString().padStart(2, '0')}`;
         }
 
@@ -322,7 +322,7 @@
                 { r: 7, c: 0 }, { r: 7, c: 2 }, { r: 7, c: 4 }, { r: 7, c: 6 }
             ];
             setup.forEach(p => {
-                const val = Math.floor(Math.random() * 12) * (Math.random() > 0.5 ? 1 : -1);
+                const val = Math.floor(Math.random() * 12);
                 boardState[p.r][p.c] = { val, player: p.r < 3 ? 2 : 1, isDama: false };
             });
             render();
@@ -409,6 +409,9 @@
             }
         }
 
+        /**
+         * Enhanced Move Calculation for Long-Range Dama
+         */
         function calculateMoves(r, c, state) {
             const piece = state[r][c];
             if (!piece) return [];
@@ -421,22 +424,33 @@
                     while (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
                         const target = state[nr][nc];
                         if (!foundEnemy) {
-                            if (!target) moves.push({ r: nr, c: nc });
-                            else if (target.player !== piece.player) { foundEnemy = true; enemyPos = { r: nr, c: nc }; }
-                            else break;
+                            if (!target) {
+                                moves.push({ r: nr, c: nc });
+                            } else if (target.player !== piece.player) {
+                                foundEnemy = true;
+                                enemyPos = { r: nr, c: nc };
+                            } else {
+                                break; // Blocked by teammate
+                            }
                         } else {
-                            if (!target) moves.push({ r: nr, c: nc, capture: enemyPos });
-                            else break;
+                            if (!target) {
+                                // Can land on any empty cell after the enemy
+                                moves.push({ r: nr, c: nc, capture: enemyPos });
+                            } else {
+                                break; // Blocked by another piece after enemy
+                            }
                         }
                         nr += d[0]; nc += d[1];
                     }
                 });
             } else {
+                // Regular piece forward movement
                 const moveDirs = piece.player === 1 ? [[-1, -1], [-1, 1]] : [[1, -1], [1, 1]];
                 moveDirs.forEach(d => {
                     let nr = r + d[0], nc = c + d[1];
                     if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8 && !state[nr][nc]) moves.push({ r: nr, c: nc });
                 });
+                // Regular piece capture (any diagonal, but only distance 2)
                 dirs.forEach(d => {
                     let nr = r + d[0], nc = c + d[1], jr = r + d[0] * 2, jc = c + d[1] * 2;
                     if (jr >= 0 && jr < 8 && jc >= 0 && jc < 8 && state[nr][nc] && state[nr][nc].player !== piece.player && !state[jr][jc]) {
@@ -451,20 +465,35 @@
             const piece = boardState[fR][fC];
             if (capture) {
                 const capturedPiece = boardState[capture.r][capture.c];
-                const op = operators[tR][tC];
+                const op = operators[tR][tC] || operators[capture.r][capture.c]; // Use target or mid-square if landing beyond
                 let points = 0;
+                
+                // Calculate base points using Damath standard
                 if (op === '+') points = piece.val + capturedPiece.val;
-                else if (op === '-') points = piece.val - capturedPiece.val;
+                else if (op === '-') points = Math.abs(piece.val - capturedPiece.val);
                 else if (op === 'x') points = piece.val * capturedPiece.val;
                 else if (op === '÷') points = capturedPiece.val !== 0 ? Math.floor(piece.val / capturedPiece.val) : 0;
-                scores[currentPlayer] += points * (piece.isDama ? 2 : 1);
+                
+                // Rule 1: Dama captures chip = x2
+                // Rule 2: Dama captures Dama = x4
+                let multiplier = 1;
+                if (piece.isDama) {
+                    multiplier = capturedPiece.isDama ? 4 : 2;
+                }
+                
+                scores[currentPlayer] += Math.abs(points) * multiplier;
                 boardState[capture.r][capture.c] = null;
             }
 
             boardState[tR][tC] = piece;
             boardState[fR][fC] = null;
-            if (!piece.isDama && ((currentPlayer === 1 && tR === 0) || (currentPlayer === 2 && tR === 7))) piece.isDama = true;
+            
+            // Promotion check
+            if (!piece.isDama && ((currentPlayer === 1 && tR === 0) || (currentPlayer === 2 && tR === 7))) {
+                piece.isDama = true;
+            }
 
+            // Continuous capture check
             if (capture) {
                 const nextMoves = calculateMoves(tR, tC, boardState).filter(m => m.capture);
                 if (nextMoves.length > 0) {
@@ -505,14 +534,16 @@
 
         async function syncOnline() {
             if (!db || !matchId) return;
-            await db.doc(`artifacts/${appId}/public/data/matches/${matchId}`).update({
-                board: JSON.stringify(boardState),
-                scores,
-                currentPlayer,
-                timerSeconds,
-                gameOver,
-                lastUpdate: firebase.firestore.FieldValue.serverTimestamp()
-            });
+            try {
+                await db.doc(`artifacts/${appId}/public/data/matches/${matchId}`).update({
+                    board: JSON.stringify(boardState),
+                    scores,
+                    currentPlayer,
+                    timerSeconds,
+                    gameOver,
+                    lastUpdate: firebase.firestore.FieldValue.serverTimestamp()
+                });
+            } catch(e) {}
         }
 
         window.hostGame = async function() {
@@ -555,7 +586,6 @@
                 const data = doc.data();
                 if (!data) return;
                 
-                // If we are host and someone joined
                 if (data.status === 'active' && myPlayerNum === 1 && document.getElementById('mp-waiting').offsetParent !== null) {
                     closeModal();
                 }
@@ -566,7 +596,7 @@
                     currentPlayer = data.currentPlayer;
                     render();
                 }
-            });
+            }, (err) => {});
         }
 
         function resetLocalGame() {
