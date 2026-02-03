@@ -172,9 +172,7 @@
 
     <script>
         /**
-         * ACTION REQUIRED: 
-         * Replace the object below with your actual Firebase configuration 
-         * from the Firebase Console (Project Settings > General > Your Apps)
+         * Updated with your specific Firebase configuration.
          */
         const MANUAL_FIREBASE_CONFIG = {
             apiKey: "AIzaSyA-_jkxLGS255XbhxYIm3WxS3wVOeD-cXE",
@@ -245,7 +243,7 @@
                     auth = firebase.auth();
                     db = firebase.firestore();
                     
-                    statusText.innerText = "Connecting to Test Database...";
+                    statusText.innerText = "Connecting to Database...";
                     
                     // Anonymous sign-in for multiplayer tracking
                     await auth.signInAnonymously();
@@ -253,7 +251,7 @@
                     auth.onAuthStateChanged((user) => {
                         if (user) {
                             isOnline = true;
-                            statusText.innerText = "Online - Test Mode Ready";
+                            statusText.innerText = "Online - Ready";
                             statusText.className = "text-[10px] font-bold uppercase tracking-widest text-green-500 mb-6 text-center";
                         }
                     });
@@ -422,7 +420,6 @@
                     return alert("Match code not found. Please double check the code.");
                 }
                 
-                // Use set with merge to ensure we don't hit "Update" vs "Overwrite" issues in Test Mode
                 await ref.set({ 
                     status: 'active',
                     lastJoined: firebase.firestore.FieldValue.serverTimestamp()
@@ -433,7 +430,7 @@
                 listenToMatch(code);
             } catch (err) { 
                 console.error("Join Error Details:", err);
-                alert(`Error joining: ${err.message || "Unknown error"}. Please ensure you are connected to the internet.`); 
+                alert(`Error joining: ${err.message || "Unknown error"}.`); 
             }
         };
 
@@ -449,7 +446,6 @@
                     document.getElementById('find-online-btn').disabled = true;
                 }
                 
-                // Only update our local state if it's the other player's turn or the game just started
                 if (data.currentPlayer !== myPlayerNum || data.status === 'active') {
                     boardState = JSON.parse(data.board);
                     scores = data.scores;
