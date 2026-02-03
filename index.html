@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tournament Damath Online</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Firebase SDKs (Compat Version) -->
     <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore-compat.js"></script>
@@ -40,7 +39,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.3rem;
+            font-size: 1.1rem;
             font-weight: 800;
             color: white;
             box-shadow: 0 4px 0 rgba(0,0,0,0.3), inset 0 2px 4px rgba(255,255,255,0.3);
@@ -148,8 +147,8 @@
             <div class="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-200">
                 <div class="flex justify-between items-start mb-6">
                     <h1 class="text-5xl font-black text-slate-900 tracking-tighter">DAMATH</h1>
-                    <div class="bg-slate-900 text-white px-4 py-2 rounded-xl text-center">
-                        <p class="text-[8px] font-black uppercase tracking-widest text-slate-400">Time Left</p>
+                    <div class="bg-slate-900 text-white px-4 py-2 rounded-xl text-center min-w-[100px]">
+                        <p id="timer-label" class="text-[8px] font-black uppercase tracking-widest text-slate-400">Waiting...</p>
                         <p id="timer" class="text-xl font-mono font-black">20:00</p>
                     </div>
                 </div>
@@ -188,7 +187,7 @@
             <div class="bg-slate-900 p-6 rounded-[2rem] text-white">
                 <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">System Status</p>
                 <p id="match-status-text" class="text-xs font-medium text-slate-400 leading-relaxed">
-                    Tournament rules: 20m timer. Force capture enabled. Higher score wins.
+                    Rules: 20m timer starts on first move. Integers (positive/negative) enabled. Force capture active.
                 </p>
             </div>
         </div>
@@ -203,17 +202,16 @@
 
     <script>
         const MANUAL_FIREBASE_CONFIG = {
-            apiKey: "AIzaSyA-_jkxLGS255XbhxYIm3WxS3wVOeD-cXE",
+            apiKey: "",
             authDomain: "tournament-damath.firebaseapp.com",
             projectId: "tournament-damath",
             storageBucket: "tournament-damath.firebasestorage.app",
             messagingSenderId: "994042280890",
-            appId: "1:994042280890:web:78cf36127de438f731bb83",
-            measurementId: "G-ER585Y49RN"
+            appId: "1:994042280890:web:78cf36127de438f731bb83"
         };
 
         // Global State
-        let db, auth, appId = typeof __app_id !== 'undefined' ? __app_id : 'tournament-damath-v1';
+        let db, auth, appId = typeof __app_id !== 'undefined' ? __app_id : 'tournament-damath-v2';
         let boardState = [];
         let currentPlayer = 1;
         let scores = { 1: 0, 2: 0 };
@@ -223,8 +221,9 @@
         let myPlayerNum = null;
         let unsubscribeMatch = null;
         let isOnline = false;
-        let timerSeconds = 1200; // 20 minutes
+        let timerSeconds = 1200; 
         let timerInterval = null;
+        let timerRunning = false;
         let mustCaptureAgain = null; 
         let gameOver = false;
 
@@ -242,12 +241,13 @@
         window.onload = function() {
             initBoard();
             tryConnectFirebase();
-            startTimer();
         };
 
         function startTimer() {
+            if (timerRunning) return;
+            timerRunning = true;
+            document.getElementById('timer-label').innerText = "Time Left";
             if (timerInterval) clearInterval(timerInterval);
-            timerSeconds = 1200;
             timerInterval = setInterval(() => {
                 if (gameOver) return;
                 timerSeconds--;
@@ -266,17 +266,32 @@
 
         function initBoard() {
             gameOver = false;
+            timerRunning = false;
+            timerSeconds = 1200;
+            updateTimerDisplay();
+            document.getElementById('timer-label').innerText = "Waiting...";
+            if (timerInterval) clearInterval(timerInterval);
+
             boardState = Array(8).fill(null).map(() => Array(8).fill(null));
+            
+            // Available Damath chips values (randomized with negatives)
+            const getVal = () => {
+                const base = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+                const val = base[Math.floor(Math.random() * base.length)];
+                return Math.random() > 0.5 ? val : -val;
+            };
+
             const setup = [
-                { r: 0, c: 1, v: 10 }, { r: 0, c: 3, v: 8 }, { r: 0, c: 5, v: 6 }, { r: 0, c: 7, v: 4 },
-                { r: 1, c: 0, v: 5 }, { r: 1, c: 2, v: 7 }, { r: 1, c: 4, v: 9 }, { r: 1, c: 6, v: 11 },
-                { r: 2, c: 1, v: 3 }, { r: 2, c: 3, v: 1 }, { r: 2, c: 5, v: 0 }, { r: 2, c: 7, v: 2 },
-                { r: 5, c: 0, v: 2 }, { r: 5, c: 2, v: 0 }, { r: 5, c: 4, v: 1 }, { r: 5, c: 6, v: 3 },
-                { r: 6, c: 1, v: 11 }, { r: 6, c: 3, v: 9 }, { r: 6, c: 5, v: 7 }, { r: 6, c: 7, v: 5 },
-                { r: 7, c: 0, v: 4 }, { r: 7, c: 2, v: 6 }, { r: 7, c: 4, v: 8 }, { r: 7, c: 6, v: 10 }
+                { r: 0, c: 1 }, { r: 0, c: 3 }, { r: 0, c: 5 }, { r: 0, c: 7 },
+                { r: 1, c: 0 }, { r: 1, c: 2 }, { r: 1, c: 4 }, { r: 1, c: 6 },
+                { r: 2, c: 1 }, { r: 2, c: 3 }, { r: 2, c: 5 }, { r: 2, c: 7 },
+                { r: 5, c: 0 }, { r: 5, c: 2 }, { r: 5, c: 4 }, { r: 5, c: 6 },
+                { r: 6, c: 1 }, { r: 6, c: 3 }, { r: 6, c: 5 }, { r: 6, c: 7 },
+                { r: 7, c: 0 }, { r: 7, c: 2 }, { r: 7, c: 4 }, { r: 7, c: 6 }
             ];
+
             setup.forEach(p => {
-                boardState[p.r][p.c] = { val: p.v, player: p.r < 3 ? 2 : 1, isDama: false };
+                boardState[p.r][p.c] = { val: getVal(), player: p.r < 3 ? 2 : 1, isDama: false };
             });
             render();
         }
@@ -299,7 +314,7 @@
                         }
                     });
                 } catch (e) {
-                    console.error("Firebase Error:", e);
+                    console.error("Firebase Connection Failed");
                 }
             }
         }
@@ -308,7 +323,6 @@
             const board = document.getElementById('board');
             board.innerHTML = '';
             
-            // Check for forced captures globally for the current player
             const allForced = getForcedCaptures(currentPlayer);
             const forcedPieces = allForced.map(m => `${m.fR},${m.fC}`);
 
@@ -346,18 +360,15 @@
             document.getElementById('score2').innerText = scores[2];
             
             const ti = document.getElementById('turn-indicator');
-            const card1 = document.getElementById('card1');
-            const card2 = document.getElementById('card2');
-            
             ti.innerText = `${currentPlayer === 1 ? "Blue" : "Red"}'s Turn`;
             if (currentPlayer === 1) {
                 ti.className = "w-full bg-blue-500 text-white py-4 rounded-2xl font-black uppercase text-xs tracking-[0.2em]";
-                card1.classList.add('active', 'border-blue-400');
-                card2.classList.remove('active', 'border-red-400');
+                document.getElementById('card1').classList.add('active', 'border-blue-400');
+                document.getElementById('card2').classList.remove('active', 'border-red-400');
             } else {
                 ti.className = "w-full bg-red-500 text-white py-4 rounded-2xl font-black uppercase text-xs tracking-[0.2em]";
-                card2.classList.add('active', 'border-red-400');
-                card1.classList.remove('active', 'border-blue-400');
+                document.getElementById('card2').classList.add('active', 'border-red-400');
+                document.getElementById('card1').classList.remove('active', 'border-blue-400');
             }
         }
 
@@ -381,22 +392,17 @@
             
             const piece = boardState[r][c];
             if (piece && piece.player === currentPlayer) {
-                // If in middle of multi-jump, only the jumping piece can be selected
                 if (mustCaptureAgain && (mustCaptureAgain.r !== r || mustCaptureAgain.c !== c)) return;
 
                 const allForced = getForcedCaptures(currentPlayer);
                 if (allForced.length > 0) {
                     const hasCapture = calculateMoves(r, c, boardState).some(m => m.capture);
-                    if (!hasCapture) return; // Must pick a piece that can capture
+                    if (!hasCapture) return;
                 }
 
                 selectedPiece = { r, c, ...piece };
                 validMoves = calculateMoves(r, c, boardState);
-                
-                // Filter valid moves to only capture moves if forced capture is active
-                if (allForced.length > 0) {
-                    validMoves = validMoves.filter(m => m.capture);
-                }
+                if (allForced.length > 0) validMoves = validMoves.filter(m => m.capture);
                 render();
             } else {
                 const move = validMoves.find(m => m.r === r && m.c === c);
@@ -411,42 +417,29 @@
             const dirs = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
             
             if (piece.isDama) {
-                // Dama: Slide and Jump (Can land anywhere behind)
                 dirs.forEach(d => {
                     let nr = r + d[0], nc = c + d[1];
                     let foundEnemy = false;
                     let enemyPos = null;
-
                     while (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
                         const target = state[nr][nc];
                         if (!foundEnemy) {
-                            if (!target) {
-                                moves.push({ r: nr, c: nc }); // Slide
-                            } else if (target.player !== piece.player) {
-                                foundEnemy = true;
-                                enemyPos = { r: nr, c: nc };
-                            } else {
-                                break; // Own piece blocks
-                            }
+                            if (!target) moves.push({ r: nr, c: nc });
+                            else if (target.player !== piece.player) { foundEnemy = true; enemyPos = { r: nr, c: nc }; }
+                            else break;
                         } else {
-                            if (!target) {
-                                moves.push({ r: nr, c: nc, capture: enemyPos }); // Long jump landing
-                            } else {
-                                break; // Blocked behind enemy
-                            }
+                            if (!target) moves.push({ r: nr, c: nc, capture: enemyPos });
+                            else break;
                         }
                         nr += d[0]; nc += d[1];
                     }
                 });
             } else {
-                // Regular Pitsa: Standard Move + Backward Capture
-                // Movement
                 const moveDirs = piece.player === 1 ? [[-1, -1], [-1, 1]] : [[1, -1], [1, 1]];
                 moveDirs.forEach(d => {
                     let nr = r + d[0], nc = c + d[1];
                     if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8 && !state[nr][nc]) moves.push({ r: nr, c: nc });
                 });
-                // Capture (All directions allowed for capture)
                 dirs.forEach(d => {
                     let nr = r + d[0], nc = c + d[1];
                     let jr = r + d[0] * 2, jc = c + d[1] * 2;
@@ -459,15 +452,16 @@
         }
 
         function executeMove(fR, fC, tR, tC, capture) {
-            const piece = boardState[fR][fC];
-            let capturedPiece = null;
+            // Start timer on first move
+            if (!timerRunning) startTimer();
 
+            const piece = boardState[fR][fC];
             if (capture) {
-                capturedPiece = boardState[capture.r][capture.c];
+                const capturedPiece = boardState[capture.r][capture.c];
                 const op = operators[tR][tC];
                 let points = 0;
                 if (op === '+') points = piece.val + capturedPiece.val;
-                else if (op === '-') points = Math.abs(piece.val - capturedPiece.val);
+                else if (op === '-') points = piece.val - capturedPiece.val;
                 else if (op === 'x') points = piece.val * capturedPiece.val;
                 else if (op === '÷') points = capturedPiece.val !== 0 ? Math.floor(piece.val / capturedPiece.val) : 0;
                 
@@ -478,12 +472,10 @@
             boardState[tR][tC] = piece;
             boardState[fR][fC] = null;
 
-            // Dama promotion
             if (!piece.isDama && ((currentPlayer === 1 && tR === 0) || (currentPlayer === 2 && tR === 7))) {
                 piece.isDama = true;
             }
 
-            // Multi-jump check
             if (capture) {
                 const nextMoves = calculateMoves(tR, tC, boardState).filter(m => m.capture);
                 if (nextMoves.length > 0) {
@@ -527,26 +519,15 @@
             const modal = document.getElementById('winner-modal');
             const title = document.getElementById('winner-title');
             const icon = document.getElementById('winner-icon');
-            const reasonEl = document.getElementById('winner-reason');
             
             document.getElementById('final-score-1').innerText = scores[1];
             document.getElementById('final-score-2').innerText = scores[2];
             
-            if (winner === 1) {
-                title.innerText = "Blue Player Wins!";
-                title.className = "text-4xl font-black text-blue-600 mb-2 tracking-tighter";
-                icon.innerText = "💙🏆";
-            } else if (winner === 2) {
-                title.innerText = "Red Player Wins!";
-                title.className = "text-4xl font-black text-red-600 mb-2 tracking-tighter";
-                icon.innerText = "❤️🏆";
-            } else {
-                title.innerText = "It's a Draw!";
-                title.className = "text-4xl font-black text-slate-600 mb-2 tracking-tighter";
-                icon.innerText = "🤝";
-            }
+            if (winner === 1) { title.innerText = "Blue Player Wins!"; icon.innerText = "💙🏆"; }
+            else if (winner === 2) { title.innerText = "Red Player Wins!"; icon.innerText = "❤️🏆"; }
+            else { title.innerText = "It's a Draw!"; icon.innerText = "🤝"; }
             
-            reasonEl.innerText = reason;
+            document.getElementById('winner-reason').innerText = reason;
             modal.style.display = 'flex';
         }
 
@@ -558,63 +539,48 @@
                 scores,
                 currentPlayer,
                 timerSeconds,
+                timerRunning,
                 gameOver,
                 lastUpdate: firebase.firestore.FieldValue.serverTimestamp()
             });
         }
 
         window.hostGame = async function() {
-            if (!isOnline) return alert("Connecting...");
+            if (!isOnline) return;
             const code = Math.random().toString(36).substring(2, 8).toUpperCase();
             document.getElementById('mp-initial').classList.add('hidden');
             document.getElementById('mp-waiting').classList.remove('hidden');
             document.getElementById('display-code').innerText = code;
-            
             try {
                 initBoard();
                 scores = { 1: 0, 2: 0 };
                 currentPlayer = 1;
-                timerSeconds = 1200;
                 await db.doc(`artifacts/${appId}/public/data/matches/${code}`).set({
                     board: JSON.stringify(boardState), 
                     scores, 
                     currentPlayer, 
-                    timerSeconds,
+                    timerSeconds: 1200,
+                    timerRunning: false,
                     status: 'waiting',
                     createdAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
-                matchId = code; 
-                myPlayerNum = 1;
+                matchId = code; myPlayerNum = 1;
                 listenToMatch(code);
-                startTimer();
-            } catch (err) {
-                console.error(err);
-                cancelMultiplayer();
-            }
+            } catch (err) { cancelMultiplayer(); }
         };
 
         window.joinGame = async function() {
-            if (!isOnline) return alert("Connecting to database...");
-            const codeInput = document.getElementById('join-code');
-            const code = codeInput.value.trim().toUpperCase();
-            if (code.length !== 6) return alert("Please enter a valid 6-digit code.");
-            
+            if (!isOnline) return;
+            const code = document.getElementById('join-code').value.trim().toUpperCase();
+            if (code.length !== 6) return;
             const ref = db.doc(`artifacts/${appId}/public/data/matches/${code}`);
             try {
                 const snap = await ref.get();
-                if (!snap.exists) return alert("Match code not found.");
-                
-                await ref.set({ 
-                    status: 'active',
-                    lastJoined: firebase.firestore.FieldValue.serverTimestamp()
-                }, { merge: true });
-                
-                matchId = code; 
-                myPlayerNum = 2;
+                if (!snap.exists) return alert("Code not found");
+                await ref.set({ status: 'active', lastJoined: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+                matchId = code; myPlayerNum = 2;
                 listenToMatch(code);
-            } catch (err) { 
-                alert(`Error joining: ${err.message}`); 
-            }
+            } catch (err) { alert("Join failed"); }
         };
 
         function listenToMatch(code) {
@@ -622,20 +588,10 @@
             unsubscribeMatch = db.doc(`artifacts/${appId}/public/data/matches/${code}`).onSnapshot(doc => {
                 const data = doc.data();
                 if (!data) return;
-                
-                if (data.status === 'active') {
-                    closeModal();
-                    document.getElementById('match-status-text').innerText = `LIVE MATCH: ${matchId}`;
-                    document.getElementById('find-online-btn').disabled = true;
-                }
-                
-                if (data.gameOver && !gameOver) {
-                    gameOver = true;
-                    scores = data.scores;
-                    endGame("Game Ended Online");
-                }
-
-                if (data.currentPlayer !== myPlayerNum || data.status === 'active') {
+                if (data.status === 'active') { closeModal(); document.getElementById('find-online-btn').disabled = true; }
+                if (data.gameOver && !gameOver) { scores = data.scores; endGame("Game Ended Online"); }
+                if (data.timerRunning && !timerRunning) startTimer();
+                if (data.currentPlayer !== myPlayerNum) {
                     boardState = JSON.parse(data.board);
                     scores = data.scores;
                     currentPlayer = data.currentPlayer;
@@ -643,30 +599,19 @@
                     updateTimerDisplay();
                     render();
                 }
-            }, (err) => console.error(err));
+            });
         }
 
         function resetLocalGame() {
             if (unsubscribeMatch) unsubscribeMatch();
-            matchId = null;
-            myPlayerNum = null;
-            currentPlayer = 1;
-            scores = { 1: 0, 2: 0 };
-            document.getElementById('match-status-text').innerText = "Offline mode active.";
+            matchId = null; myPlayerNum = null;
             document.getElementById('find-online-btn').disabled = false;
             initBoard();
-            startTimer();
         }
 
         window.openMultiplayerModal = () => document.getElementById('multiplayer-modal').style.display = 'flex';
         window.closeModal = () => document.getElementById('multiplayer-modal').style.display = 'none';
-        window.cancelMultiplayer = () => { 
-            if(unsubscribeMatch) unsubscribeMatch(); 
-            matchId = null; 
-            document.getElementById('mp-initial').classList.remove('hidden');
-            document.getElementById('mp-waiting').classList.add('hidden');
-            closeModal(); 
-        };
+        window.cancelMultiplayer = () => { if(unsubscribeMatch) unsubscribeMatch(); matchId = null; closeModal(); };
     </script>
 </body>
 </html>
