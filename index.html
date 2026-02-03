@@ -114,21 +114,14 @@
             </div>
 
             <div class="mt-6 space-y-3">
-                <button onclick="startLocalGame()" class="w-full bg-green-600 text-white py-3 rounded-lg font-bold hover:bg-green-700 shadow-lg shadow-green-100 transition">
-                    Play Offline (Local)
-                </button>
-                <button onclick="openMultiplayerModal()" class="w-full bg-indigo-600 text-white py-3 rounded-lg font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition">
-                    Online Multiplayer
+                <button onclick="openMultiplayerModal()" class="w-full bg-indigo-600 text-white py-4 rounded-lg font-bold hover:bg-indigo-700 shadow-lg shadow-indigo-100 transition">
+                    Find Online Match
                 </button>
             </div>
             
             <p id="turn-indicator" class="mt-4 text-center font-bold py-2 rounded bg-blue-100 text-blue-800 uppercase text-xs tracking-widest">
                 Blue's Turn
             </p>
-            
-            <button onclick="resetGame()" class="w-full mt-4 bg-slate-100 text-slate-500 py-2 rounded-lg text-xs font-bold hover:bg-slate-200 transition">
-                Reset Board
-            </button>
         </div>
 
         <div class="md:col-span-2">
@@ -137,8 +130,8 @@
             </div>
             
             <div class="mt-6 bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-                <p class="text-[10px] font-bold text-gray-400 uppercase mb-2">Game URL</p>
-                <input type="text" id="share-url" readonly class="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-xs font-mono text-gray-500 outline-none" value="">
+                <p class="text-[10px] font-bold text-gray-400 uppercase mb-2">Game Status</p>
+                <p id="match-status-text" class="text-xs font-mono text-gray-500">No active online match. Host or Join to begin.</p>
             </div>
         </div>
     </div>
@@ -168,7 +161,6 @@
         ];
 
         window.onload = function() {
-            document.getElementById('share-url').value = window.location.href;
             initBoard();
             tryConnectFirebase();
         };
@@ -189,21 +181,9 @@
             render();
         }
 
-        function startLocalGame() {
-            if (unsubscribeMatch) unsubscribeMatch();
-            matchId = null;
-            myPlayerNum = null;
-            initBoard();
-            scores = { 1: 0, 2: 0 };
-            currentPlayer = 1;
-            render();
-            document.getElementById('board').scrollIntoView({ behavior: 'smooth' });
-        }
-
         async function tryConnectFirebase() {
             const statusText = document.getElementById('mp-status');
 
-            // Explicitly check for configuration availability in the environment
             if (typeof __firebase_config !== 'undefined' && __firebase_config) {
                 try {
                     const config = JSON.parse(__firebase_config);
@@ -211,17 +191,13 @@
                     auth = firebase.auth();
                     db = firebase.firestore();
                     
-                    statusText.innerText = "Authenticating with server...";
+                    statusText.innerText = "Authenticating...";
                     
-                    const initAuth = async () => {
-                        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                            await auth.signInWithCustomToken(__initial_auth_token);
-                        } else {
-                            await auth.signInAnonymously();
-                        }
-                    };
-
-                    await initAuth();
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await auth.signInWithCustomToken(__initial_auth_token);
+                    } else {
+                        await auth.signInAnonymously();
+                    }
 
                     auth.onAuthStateChanged((user) => {
                         if (user) {
@@ -232,10 +208,10 @@
                     });
                 } catch (e) {
                     console.error("Firebase Connection Error:", e);
-                    statusText.innerText = "Connection Error. Playing Local Mode.";
+                    statusText.innerText = "Connection Error.";
                 }
             } else {
-                statusText.innerText = "Offline Mode: Multiplayer unavailable.";
+                statusText.innerText = "Configuration Missing.";
             }
         }
 
@@ -274,7 +250,7 @@
         }
 
         function handleCellClick(r, c) {
-            if (matchId && currentPlayer !== myPlayerNum) return;
+            if (!matchId || currentPlayer !== myPlayerNum) return;
             
             const piece = boardState[r][c];
             if (piece && piece.player === currentPlayer) {
@@ -334,7 +310,6 @@
 
         async function syncOnline() {
             if (!db || !auth.currentUser) return;
-            // RULE 1: Strict Paths
             const ref = db.doc(`artifacts/${appId}/public/data/matches/${matchId}`);
             await ref.update({
                 board: JSON.stringify(boardState),
@@ -346,17 +321,19 @@
 
         window.hostGame = async function() {
             if (!isOnline && (!auth || !auth.currentUser)) {
-                return alert("Connection to server is not ready yet. Please ensure you are in an online environment.");
+                return alert("Still connecting to server...");
             }
             const code = Math.floor(100000 + Math.random() * 900000).toString();
-            matchId = code; 
-            myPlayerNum = 1;
+            
             document.getElementById('mp-initial').classList.add('hidden');
             document.getElementById('mp-waiting').classList.remove('hidden');
             document.getElementById('display-code').innerText = code;
             
             try {
-                // RULE 1: Strict Paths
+                initBoard();
+                scores = { 1: 0, 2: 0 };
+                currentPlayer = 1;
+
                 await db.doc(`artifacts/${appId}/public/data/matches/${code}`).set({
                     board: JSON.stringify(boardState), 
                     scores, 
@@ -365,24 +342,25 @@
                     hostId: auth.currentUser.uid,
                     createdAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
+
+                matchId = code; 
+                myPlayerNum = 1;
                 listenToMatch(code);
             } catch (err) {
                 console.error("Hosting failed:", err);
-                alert("Failed to host game. Please try again.");
                 cancelMultiplayer();
             }
         };
 
         window.joinGame = async function() {
-            if (!isOnline && (!auth || !auth.currentUser)) return alert("Still connecting... Please wait.");
+            if (!isOnline && (!auth || !auth.currentUser)) return alert("Still connecting...");
             const code = document.getElementById('join-code').value.trim();
-            if (code.length !== 6) return alert("Please enter a 6-digit code.");
+            if (code.length !== 6) return alert("Enter 6-digit code.");
             
-            // RULE 1: Strict Paths
             const ref = db.doc(`artifacts/${appId}/public/data/matches/${code}`);
             try {
                 const snap = await ref.get();
-                if (!snap.exists()) return alert("Match code not found.");
+                if (!snap.exists()) return alert("Match not found.");
                 
                 await ref.update({ 
                     status: 'active',
@@ -398,13 +376,13 @@
 
         function listenToMatch(code) {
             if (unsubscribeMatch) unsubscribeMatch();
-            // RULE 1: Strict Paths
             unsubscribeMatch = db.doc(`artifacts/${appId}/public/data/matches/${code}`).onSnapshot(doc => {
                 const data = doc.data();
                 if (!data) return;
                 
-                if (data.status === 'active' && document.getElementById('multiplayer-modal').style.display === 'flex') {
+                if (data.status === 'active') {
                     document.getElementById('multiplayer-modal').style.display = 'none';
+                    document.getElementById('match-status-text').innerText = `Online Match Active: ${matchId} | You are ${myPlayerNum === 1 ? 'Blue' : 'Red'}`;
                 }
                 
                 if (data.currentPlayer === myPlayerNum || data.status === 'active') {
@@ -414,7 +392,6 @@
                     render();
                 }
             }, (err) => {
-                console.error("Match link broken", err);
                 cancelMultiplayer();
             });
         }
@@ -426,9 +403,9 @@
             matchId = null; 
             document.getElementById('mp-initial').classList.remove('hidden');
             document.getElementById('mp-waiting').classList.add('hidden');
+            document.getElementById('match-status-text').innerText = "No active online match.";
             closeModal(); 
         };
-        window.resetGame = () => { if(confirm("Reset the match?")) { startLocalGame(); } };
     </script>
 </body>
 </html>
