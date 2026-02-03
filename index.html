@@ -205,13 +205,15 @@
         const appId = typeof __app_id !== 'undefined' ? __app_id : 'tournament-damath-v2';
         const firebaseConfigStr = typeof __firebase_config !== 'undefined' ? __firebase_config : null;
         
+        // UPDATED: Now matches the config provided by the user
         const DEFAULT_CONFIG = {
-            apiKey: "", // Handled by environment
+            apiKey: "AIzaSyA-_jkxLGS255XbhxYIm3WxS3wVOeD-cXE",
             authDomain: "tournament-damath.firebaseapp.com",
             projectId: "tournament-damath",
             storageBucket: "tournament-damath.firebasestorage.app",
             messagingSenderId: "994042280890",
-            appId: "1:994042280890:web:78cf36127de438f731bb83"
+            appId: "1:994042280890:web:78cf36127de438f731bb83",
+            measurementId: "G-ER585Y49RN"
         };
 
         // Global State
@@ -270,15 +272,18 @@
 
                 // Attempt sign in
                 if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await auth.signInWithCustomToken(__initial_auth_token);
+                    await auth.signInWithCustomToken(__initial_auth_token).catch(async (err) => {
+                        console.warn("Custom token failed, falling back to anonymous", err);
+                        await auth.signInAnonymously();
+                    });
                 } else {
                     await auth.signInAnonymously();
                 }
 
             } catch (e) {
-                console.error("Firebase Error:", e);
+                console.error("Firebase Auth Error:", e.code, e.message);
                 isOnline = false;
-                statusText.innerText = "Authentication Error - Check Settings";
+                statusText.innerText = `Auth Error: ${e.code || 'Check Console'}`;
                 statusText.className = "text-[10px] font-bold uppercase tracking-widest text-red-500 mb-6 text-center";
             }
         }
@@ -583,7 +588,7 @@
             } catch (err) { 
                 console.error(err);
                 cancelMultiplayer(); 
-                alert("Could not create match. Ensure Firestore is enabled.");
+                alert("Could not create match. Ensure Firestore rules allow public access to 'matches' collection.");
             }
         };
 
