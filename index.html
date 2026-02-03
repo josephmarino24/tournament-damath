@@ -3,17 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Tournament Damath Online</title>
+    <title>Damath - Tournament Edition</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore-compat.js"></script>
     <style>
+        body { font-family: sans-serif; background-color: #f8fafc; margin: 0; display: flex; flex-direction: column; align-items: center; padding: 20px; }
         .board-grid {
             display: grid;
             grid-template-columns: repeat(8, 1fr);
             width: 100%;
-            max-width: 600px;
+            max-width: 500px;
             aspect-ratio: 1/1;
             border: 12px solid #1e293b;
             background-color: #1e293b;
@@ -25,13 +26,11 @@
             align-items: center;
             justify-content: center;
             font-weight: bold;
-            font-size: 0.8rem;
+            font-size: 0.75rem;
             cursor: pointer;
-            user-select: none;
         }
         .cell.dark { background-color: #2d5a27; color: rgba(255,255,255,0.2); }
         .cell.light { background-color: #f0f0d8; color: rgba(0,0,0,0.1); }
-        
         .pitsa {
             width: 82%;
             height: 82%;
@@ -42,190 +41,115 @@
             font-size: 1.1rem;
             font-weight: 800;
             color: white;
-            box-shadow: 0 4px 0 rgba(0,0,0,0.3), inset 0 2px 4px rgba(255,255,255,0.3);
             z-index: 10;
-            transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            box-shadow: 0 4px 0 rgba(0,0,0,0.3);
             position: relative;
         }
-        .pitsa.blue { background: radial-gradient(circle at 30% 30%, #3b82f6, #1d4ed8); border: 2px solid #1e3a8a; }
-        .pitsa.red { background: radial-gradient(circle at 30% 30%, #ef4444, #b91c1c); border: 2px solid #7f1d1d; }
-        .pitsa.selected { transform: scale(1.1) translateY(-4px); border: 3px solid #fbbf24; box-shadow: 0 8px 15px rgba(251, 191, 36, 0.4); }
-        .pitsa.dama::after { 
-            content: '★'; 
-            position: absolute; 
-            top: -2px; 
-            right: -2px;
-            color: #fbbf24; 
-            font-size: 1.2rem; 
-            text-shadow: 0 0 3px black; 
-        }
-
-        #multiplayer-modal, #winner-modal {
+        .pitsa.blue { background: radial-gradient(circle at 30% 30%, #3b82f6, #1d4ed8); }
+        .pitsa.red { background: radial-gradient(circle at 30% 30%, #ef4444, #b91c1c); }
+        .pitsa.selected { transform: scale(1.1); outline: 4px solid #fbbf24; z-index: 20; }
+        .pitsa.dama::after { content: '★'; position: absolute; top: -2px; right: -2px; color: #fbbf24; font-size: 1.2rem; text-shadow: 0 0 3px black; }
+        .move-dot { width: 14px; height: 14px; background: rgba(251, 191, 36, 0.8); border-radius: 50%; border: 2px solid white; }
+        
+        #multiplayer-modal {
             display: none;
             position: fixed;
             inset: 0;
             background: rgba(15, 23, 42, 0.9);
-            backdrop-filter: blur(4px);
-            z-index: 200;
+            z-index: 100;
             align-items: center;
             justify-content: center;
         }
-
-        .score-card {
-            transition: transform 0.3s ease;
-        }
-        .score-card.active {
-            transform: scale(1.02);
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
-        }
-        
-        .forced-capture-hint {
-            box-shadow: inset 0 0 15px #facc15;
-            animation: pulse-border 1.5s infinite;
-        }
-        @keyframes pulse-border {
-            0% { box-shadow: inset 0 0 5px #facc15; }
-            50% { box-shadow: inset 0 0 20px #facc15; }
-            100% { box-shadow: inset 0 0 5px #facc15; }
-        }
     </style>
 </head>
-<body class="bg-slate-50 min-h-screen flex flex-col items-center p-4 lg:p-10 font-sans text-slate-900">
+<body class="bg-slate-50">
 
-    <!-- Multiplayer Modal -->
-    <div id="multiplayer-modal">
-        <div class="bg-white p-8 rounded-3xl shadow-2xl max-w-sm w-full mx-4 border border-slate-200">
-            <h2 class="text-3xl font-black mb-1 text-slate-800 tracking-tight text-center">Play Online</h2>
-            <p id="mp-status" class="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-6 text-center">Checking Connection...</p>
+    <div id="multiplayer-modal" class="p-4">
+        <div class="bg-white p-8 rounded-3xl shadow-2xl max-w-sm w-full border border-slate-200">
+            <h2 class="text-2xl font-black mb-1 text-slate-800 text-center">Multiplayer</h2>
+            <p id="mp-status" class="text-[10px] font-bold uppercase tracking-widest text-orange-500 mb-6 text-center">Connecting to Server...</p>
             
-            <div id="mp-initial">
-                <button id="host-btn" onclick="hostGame()" class="w-full bg-blue-600 text-white py-4 rounded-2xl font-black mb-3 hover:bg-blue-700 transition-all shadow-lg shadow-blue-200 active:scale-95">Host New Match</button>
-                <div class="relative flex py-6 items-center">
-                    <div class="flex-grow border-t border-slate-100"></div>
-                    <span class="flex-shrink mx-4 text-slate-300 text-[10px] font-black uppercase">Or Join</span>
-                    <div class="flex-grow border-t border-slate-100"></div>
-                </div>
-                <input type="text" id="join-code" placeholder="6-digit code" class="w-full p-4 border-2 border-slate-100 rounded-2xl mb-4 text-center font-mono text-2xl tracking-widest focus:border-blue-500 focus:outline-none transition-colors uppercase" maxlength="6">
-                <button id="join-btn" onclick="joinGame()" class="w-full bg-slate-800 text-white py-4 rounded-2xl font-black hover:bg-slate-700 transition-all active:scale-95">Join Match</button>
+            <div id="mp-controls">
+                <button onclick="hostGame()" class="w-full bg-blue-600 text-white py-4 rounded-2xl font-black mb-3 hover:bg-blue-700 transition-all active:scale-95">Host Match</button>
+                <input type="text" id="join-code" placeholder="6-digit code" class="w-full p-4 border-2 border-slate-100 rounded-2xl mb-2 text-center font-mono text-xl uppercase" maxlength="6">
+                <button onclick="joinGame()" class="w-full bg-slate-800 text-white py-4 rounded-2xl font-black hover:bg-slate-700 active:scale-95">Join Match</button>
+            </div>
+
+            <div id="mp-waiting" class="hidden text-center">
+                <p class="text-slate-500 text-sm mb-2">Room Code:</p>
+                <h3 id="display-code" class="text-4xl font-mono font-black text-blue-600 mb-6">------</h3>
+                <button onclick="cancelMultiplayer()" class="text-red-500 font-bold text-xs uppercase">Cancel</button>
             </div>
             
-            <div id="mp-waiting" class="hidden text-center py-4">
-                <p class="text-slate-500 text-sm font-medium mb-2">Share code with opponent:</p>
-                <div class="bg-slate-50 rounded-2xl py-6 mb-6">
-                    <h3 id="display-code" class="text-5xl font-mono font-black text-blue-600 tracking-tighter uppercase">------</h3>
-                </div>
-                <button onclick="cancelMultiplayer()" class="mt-8 text-red-500 font-black text-xs uppercase tracking-widest hover:text-red-600">Cancel Match</button>
-            </div>
-            
-            <button onclick="closeModal()" class="w-full mt-6 text-slate-300 text-[10px] uppercase font-black tracking-[0.2em] hover:text-slate-500 transition-colors">Close</button>
+            <button onclick="closeModal()" class="w-full mt-6 text-slate-400 text-[10px] uppercase font-black tracking-widest">Play Offline Instead</button>
         </div>
     </div>
 
-    <!-- Winner Modal -->
-    <div id="winner-modal">
-        <div class="bg-white p-10 rounded-[2.5rem] shadow-2xl max-w-md w-full mx-4 text-center border-4 border-slate-100">
-            <div id="winner-icon" class="text-7xl mb-4">🏆</div>
-            <h2 id="winner-title" class="text-4xl font-black text-slate-900 mb-2 tracking-tighter">Blue Wins!</h2>
-            <p id="winner-reason" class="text-slate-500 font-medium mb-8">Higher score achieved.</p>
-            <div class="flex gap-4 justify-center mb-8">
-                <div class="bg-blue-50 px-6 py-3 rounded-2xl">
-                    <p class="text-[10px] font-black text-blue-500 uppercase">Blue</p>
-                    <p id="final-score-1" class="text-2xl font-mono font-black">0</p>
+    <div class="w-full max-w-5xl flex flex-col gap-6">
+        <div class="flex flex-col md:flex-row justify-between items-center bg-white p-6 rounded-[2rem] shadow-sm border border-slate-200">
+            <div class="flex items-center gap-4">
+                <h1 class="text-4xl font-black text-slate-900 tracking-tighter">DAMATH</h1>
+                <div id="connection-pill" class="px-3 py-1 bg-slate-100 text-slate-500 text-[10px] font-black rounded-full uppercase">Offline</div>
+            </div>
+            
+            <div class="flex gap-4 mt-4 md:mt-0">
+                <div id="card1" class="text-center bg-blue-50 p-3 rounded-2xl border-2 border-blue-200 min-w-[90px]">
+                    <div class="text-[10px] font-black text-blue-500 uppercase">Blue</div>
+                    <div id="score1" class="text-2xl font-black">0</div>
                 </div>
-                <div class="bg-red-50 px-6 py-3 rounded-2xl">
-                    <p class="text-[10px] font-black text-red-500 uppercase">Red</p>
-                    <p id="final-score-2" class="text-2xl font-mono font-black">0</p>
+                <div id="card2" class="text-center bg-red-50 p-3 rounded-2xl border-2 border-transparent min-w-[90px]">
+                    <div class="text-[10px] font-black text-red-500 uppercase">Red</div>
+                    <div id="score2" class="text-2xl font-black">0</div>
+                </div>
+                <div class="text-center bg-slate-900 text-white p-3 rounded-2xl min-w-[90px]">
+                    <div class="text-[10px] font-black text-slate-400 uppercase">Timer</div>
+                    <div id="timer" class="text-2xl font-mono font-black">20:00</div>
                 </div>
             </div>
-            <button onclick="resetLocalGame(); document.getElementById('winner-modal').style.display='none';" class="w-full bg-slate-900 text-white py-4 rounded-2xl font-black hover:bg-slate-800 transition-all active:scale-95">Play Again</button>
         </div>
-    </div>
 
-    <div class="max-w-6xl w-full grid grid-cols-1 lg:grid-cols-12 gap-10">
-        <!-- Side Panel -->
-        <div class="lg:col-span-4 flex flex-col gap-6">
-            <div class="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-200">
-                <div class="flex justify-between items-start mb-6">
-                    <h1 class="text-5xl font-black text-slate-900 tracking-tighter">DAMATH</h1>
-                    <div class="bg-slate-900 text-white px-4 py-2 rounded-xl text-center min-w-[100px]">
-                        <p id="timer-label" class="text-[8px] font-black uppercase tracking-widest text-slate-400">Waiting...</p>
-                        <p id="timer" class="text-xl font-mono font-black">20:00</p>
-                    </div>
+        <div class="flex flex-col lg:flex-row gap-8 items-start">
+            <div id="board" class="board-grid shadow-2xl mx-auto"></div>
+            
+            <div class="w-full lg:w-72 space-y-4">
+                <div id="turn-box" class="bg-blue-600 text-white p-6 rounded-[2rem] text-center shadow-lg transition-all">
+                    <p class="text-xs font-black uppercase tracking-widest opacity-70">Current Turn</p>
+                    <h2 id="turn-text" class="text-2xl font-black">Blue</h2>
                 </div>
                 
-                <div class="space-y-4">
-                    <div id="card1" class="score-card p-5 rounded-2xl bg-blue-50 border-2 border-blue-200 flex justify-between items-center active">
-                        <div>
-                            <p class="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-1">Blue Player</p>
-                            <p id="score1" class="text-4xl font-mono font-black text-blue-900">0</p>
-                        </div>
-                        <div class="w-10 h-10 rounded-full bg-blue-600 border-4 border-blue-200"></div>
-                    </div>
-                    
-                    <div id="card2" class="score-card p-5 rounded-2xl bg-red-50 border-2 border-red-100 flex justify-between items-center">
-                        <div>
-                            <p class="text-[10px] font-black text-red-500 uppercase tracking-widest mb-1">Red Player</p>
-                            <p id="score2" class="text-4xl font-mono font-black text-red-900">0</p>
-                        </div>
-                        <div class="w-10 h-10 rounded-full bg-red-600 border-4 border-red-200"></div>
-                    </div>
-                </div>
+                <button onclick="openModal()" id="online-btn" class="w-full bg-indigo-600 text-white py-5 rounded-[2rem] font-black hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all active:scale-95 text-sm uppercase tracking-widest">
+                    Play Online
+                </button>
 
-                <div class="mt-10 space-y-3">
-                    <button id="find-online-btn" onclick="openMultiplayerModal()" class="w-full bg-indigo-600 text-white py-5 rounded-2xl font-black hover:bg-indigo-700 shadow-xl shadow-indigo-100 transition-all active:scale-95 text-sm uppercase tracking-widest">
-                        Online Multiplayer
-                    </button>
-                    <button id="turn-indicator" class="w-full bg-blue-500 text-white py-4 rounded-2xl font-black uppercase text-xs tracking-[0.2em] cursor-default transition-all">
-                        Blue's Turn
-                    </button>
-                    <button onclick="resetLocalGame()" class="w-full bg-white text-slate-400 py-3 rounded-2xl font-bold text-xs uppercase tracking-widest hover:text-slate-600 transition-colors">
-                        Reset Board
-                    </button>
-                </div>
-            </div>
-            
-            <div class="bg-slate-900 p-6 rounded-[2rem] text-white">
-                <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">System Status</p>
-                <p id="match-status-text" class="text-xs font-medium text-slate-400 leading-relaxed">
-                    Rules: 20m timer starts on first move. Integers (positive/negative) enabled. Force capture active.
-                </p>
-            </div>
-        </div>
+                <button onclick="resetGame()" class="w-full bg-white text-slate-400 py-4 rounded-[2rem] border border-slate-200 font-bold text-xs uppercase hover:bg-slate-50">
+                    Reset Board
+                </button>
 
-        <!-- Board Area -->
-        <div class="lg:col-span-8 flex flex-col items-center">
-            <div id="board" class="board-grid shadow-2xl">
-                <!-- Board generated by JS -->
+                <div class="bg-slate-100 p-4 rounded-2xl">
+                    <p class="text-[10px] font-black text-slate-400 uppercase mb-2">Rules</p>
+                    <p class="text-[11px] text-slate-600 leading-relaxed italic">
+                        "Forced Capture" is active. You must take an opponent's piece if the move is available.
+                    </p>
+                </div>
             </div>
         </div>
     </div>
 
     <script>
-        const MANUAL_FIREBASE_CONFIG = {
-            apiKey: "",
-            authDomain: "tournament-damath.firebaseapp.com",
-            projectId: "tournament-damath",
-            storageBucket: "tournament-damath.firebasestorage.app",
-            messagingSenderId: "994042280890",
-            appId: "1:994042280890:web:78cf36127de438f731bb83"
-        };
-
-        // Global State
-        let db, auth, appId = typeof __app_id !== 'undefined' ? __app_id : 'tournament-damath-v2';
+        // Configuration
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'damath-tournament';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        
+        let db, auth;
         let boardState = [];
         let currentPlayer = 1;
         let scores = { 1: 0, 2: 0 };
         let selectedPiece = null;
         let validMoves = [];
+        let timer = 1200;
         let matchId = null;
         let myPlayerNum = null;
-        let unsubscribeMatch = null;
         let isOnline = false;
-        let timerSeconds = 1200; 
-        let timerInterval = null;
-        let timerRunning = false;
-        let mustCaptureAgain = null; 
-        let gameOver = false;
 
         const operators = [
             ['', '+', '', '-', '', 'x', '', '÷'],
@@ -238,191 +162,83 @@
             ['÷', '', 'x', '', '-', '', '+', '']
         ];
 
-        window.onload = function() {
-            initBoard();
-            tryConnectFirebase();
+        window.onload = () => {
+            initGame();
+            if (firebaseConfig) connectFirebase();
+            // Auto-fallback for "Server Connecting" hang
+            setTimeout(() => {
+                if (!isOnline) {
+                    const status = document.getElementById('mp-status');
+                    status.innerText = "Server Unreachable - Local Mode Active";
+                    status.className = "text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-6 text-center";
+                }
+            }, 3000);
         };
 
-        function startTimer() {
-            if (timerRunning) return;
-            timerRunning = true;
-            document.getElementById('timer-label').innerText = "Time Left";
-            if (timerInterval) clearInterval(timerInterval);
-            timerInterval = setInterval(() => {
-                if (gameOver) return;
-                timerSeconds--;
-                updateTimerDisplay();
-                if (timerSeconds <= 0) {
-                    endGame("Time Expired");
+        async function connectFirebase() {
+            try {
+                if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+                auth = firebase.auth();
+                db = firebase.firestore();
+
+                const initAuth = async () => {
+                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+                        await auth.signInWithCustomToken(__initial_auth_token);
+                    } else {
+                        await auth.signInAnonymously();
+                    }
+                };
+                
+                await initAuth();
+                isOnline = true;
+                const pill = document.getElementById('connection-pill');
+                pill.innerText = "Online";
+                pill.className = "px-3 py-1 bg-green-100 text-green-600 text-[10px] font-black rounded-full uppercase";
+                document.getElementById('mp-status').innerText = "Connected - Ready to Play";
+                document.getElementById('mp-status').className = "text-[10px] font-bold uppercase tracking-widest text-green-500 mb-6 text-center";
+            } catch (e) {
+                console.error("Firebase connection failed", e);
+            }
+        }
+
+        function initGame() {
+            timer = 1200;
+            currentPlayer = 1;
+            scores = { 1: 0, 2: 0 };
+            boardState = Array(8).fill(null).map(() => Array(8).fill(null));
+            const setup = [
+                {r:0,c:1},{r:0,c:3},{r:0,c:5},{r:0,c:7},
+                {r:1,c:0},{r:1,c:2},{r:1,c:4},{r:1,c:6},
+                {r:2,c:1},{r:2,c:3},{r:2,c:5},{r:2,c:7},
+                {r:5,c:0},{r:5,c:2},{r:5,c:4},{r:5,c:6},
+                {r:6,c:1},{r:6,c:3},{r:6,c:5},{r:6,c:7},
+                {r:7,c:0},{r:7,c:2},{r:7,c:4},{r:7,c:6}
+            ];
+            setup.forEach(p => {
+                const val = Math.floor(Math.random() * 12) * (Math.random() > 0.5 ? 1 : -1);
+                boardState[p.r][p.c] = { val, player: p.r < 3 ? 2 : 1, isDama: false };
+            });
+            render();
+            setInterval(() => {
+                if (timer > 0) {
+                    timer--;
+                    const m = Math.floor(timer/60), s = timer%60;
+                    document.getElementById('timer').innerText = `${m}:${s.toString().padStart(2,'0')}`;
                 }
             }, 1000);
         }
 
-        function updateTimerDisplay() {
-            const m = Math.floor(timerSeconds / 60);
-            const s = timerSeconds % 60;
-            document.getElementById('timer').innerText = `${m}:${s.toString().padStart(2, '0')}`;
-        }
-
-        function initBoard() {
-            gameOver = false;
-            timerRunning = false;
-            timerSeconds = 1200;
-            updateTimerDisplay();
-            document.getElementById('timer-label').innerText = "Waiting...";
-            if (timerInterval) clearInterval(timerInterval);
-
-            boardState = Array(8).fill(null).map(() => Array(8).fill(null));
-            
-            // Available Damath chips values (randomized with negatives)
-            const getVal = () => {
-                const base = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
-                const val = base[Math.floor(Math.random() * base.length)];
-                return Math.random() > 0.5 ? val : -val;
-            };
-
-            const setup = [
-                { r: 0, c: 1 }, { r: 0, c: 3 }, { r: 0, c: 5 }, { r: 0, c: 7 },
-                { r: 1, c: 0 }, { r: 1, c: 2 }, { r: 1, c: 4 }, { r: 1, c: 6 },
-                { r: 2, c: 1 }, { r: 2, c: 3 }, { r: 2, c: 5 }, { r: 2, c: 7 },
-                { r: 5, c: 0 }, { r: 5, c: 2 }, { r: 5, c: 4 }, { r: 5, c: 6 },
-                { r: 6, c: 1 }, { r: 6, c: 3 }, { r: 6, c: 5 }, { r: 6, c: 7 },
-                { r: 7, c: 0 }, { r: 7, c: 2 }, { r: 7, c: 4 }, { r: 7, c: 6 }
-            ];
-
-            setup.forEach(p => {
-                boardState[p.r][p.c] = { val: getVal(), player: p.r < 3 ? 2 : 1, isDama: false };
-            });
-            render();
-        }
-
-        async function tryConnectFirebase() {
-            const statusText = document.getElementById('mp-status');
-            let config = (typeof __firebase_config !== 'undefined' && __firebase_config) ? JSON.parse(__firebase_config) : MANUAL_FIREBASE_CONFIG;
-
-            if (config && config.apiKey) {
-                try {
-                    if (!firebase.apps.length) firebase.initializeApp(config);
-                    auth = firebase.auth();
-                    db = firebase.firestore();
-                    await auth.signInAnonymously();
-                    auth.onAuthStateChanged((user) => {
-                        if (user) {
-                            isOnline = true;
-                            statusText.innerText = "Online - Ready";
-                            statusText.className = "text-[10px] font-bold uppercase tracking-widest text-green-500 mb-6 text-center";
-                        }
-                    });
-                } catch (e) {
-                    console.error("Firebase Connection Failed");
-                }
-            }
-        }
-
-        function render() {
-            const board = document.getElementById('board');
-            board.innerHTML = '';
-            
-            const allForced = getForcedCaptures(currentPlayer);
-            const forcedPieces = allForced.map(m => `${m.fR},${m.fC}`);
-
-            for (let r = 0; r < 8; r++) {
-                for (let c = 0; c < 8; c++) {
-                    const cell = document.createElement('div');
-                    const isDark = (r + c) % 2 !== 0;
-                    cell.className = `cell ${isDark ? 'dark' : 'light'}`;
-                    cell.innerText = operators[r][c];
-                    
-                    if (isDark && !gameOver) {
-                        if (forcedPieces.includes(`${r},${c}`) && !mustCaptureAgain) {
-                            cell.classList.add('forced-capture-hint');
-                        }
-                        cell.onclick = () => handleCellClick(r, c);
-                    }
-
-                    const piece = boardState[r][c];
-                    if (piece) {
-                        const pDiv = document.createElement('div');
-                        pDiv.className = `pitsa ${piece.player === 1 ? 'blue' : 'red'} ${piece.isDama ? 'dama' : ''}`;
-                        if (selectedPiece && selectedPiece.r === r && selectedPiece.c === c) pDiv.classList.add('selected');
-                        pDiv.innerText = piece.val;
-                        cell.appendChild(pDiv);
-                    }
-                    if (validMoves.some(m => m.r === r && m.c === c)) {
-                        const dot = document.createElement('div');
-                        dot.className = 'absolute w-4 h-4 rounded-full bg-yellow-400 opacity-80 border-2 border-white';
-                        cell.appendChild(dot);
-                    }
-                    board.appendChild(cell);
-                }
-            }
-            document.getElementById('score1').innerText = scores[1];
-            document.getElementById('score2').innerText = scores[2];
-            
-            const ti = document.getElementById('turn-indicator');
-            ti.innerText = `${currentPlayer === 1 ? "Blue" : "Red"}'s Turn`;
-            if (currentPlayer === 1) {
-                ti.className = "w-full bg-blue-500 text-white py-4 rounded-2xl font-black uppercase text-xs tracking-[0.2em]";
-                document.getElementById('card1').classList.add('active', 'border-blue-400');
-                document.getElementById('card2').classList.remove('active', 'border-red-400');
-            } else {
-                ti.className = "w-full bg-red-500 text-white py-4 rounded-2xl font-black uppercase text-xs tracking-[0.2em]";
-                document.getElementById('card2').classList.add('active', 'border-red-400');
-                document.getElementById('card1').classList.remove('active', 'border-blue-400');
-            }
-        }
-
-        function getForcedCaptures(player) {
-            const captures = [];
-            for (let r = 0; r < 8; r++) {
-                for (let c = 0; c < 8; c++) {
-                    const piece = boardState[r][c];
-                    if (piece && piece.player === player) {
-                        const moves = calculateMoves(r, c, boardState);
-                        moves.filter(m => m.capture).forEach(m => captures.push({ ...m, fR: r, fC: c }));
-                    }
-                }
-            }
-            return captures;
-        }
-
-        function handleCellClick(r, c) {
-            if (gameOver) return;
-            if (matchId && myPlayerNum !== null && currentPlayer !== myPlayerNum) return;
-            
+        function calculateMoves(r, c) {
             const piece = boardState[r][c];
-            if (piece && piece.player === currentPlayer) {
-                if (mustCaptureAgain && (mustCaptureAgain.r !== r || mustCaptureAgain.c !== c)) return;
-
-                const allForced = getForcedCaptures(currentPlayer);
-                if (allForced.length > 0) {
-                    const hasCapture = calculateMoves(r, c, boardState).some(m => m.capture);
-                    if (!hasCapture) return;
-                }
-
-                selectedPiece = { r, c, ...piece };
-                validMoves = calculateMoves(r, c, boardState);
-                if (allForced.length > 0) validMoves = validMoves.filter(m => m.capture);
-                render();
-            } else {
-                const move = validMoves.find(m => m.r === r && m.c === c);
-                if (move) executeMove(selectedPiece.r, selectedPiece.c, r, c, move.capture);
-            }
-        }
-
-        function calculateMoves(r, c, state) {
-            const piece = state[r][c];
             if (!piece) return [];
             const moves = [];
             const dirs = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
             
             if (piece.isDama) {
                 dirs.forEach(d => {
-                    let nr = r + d[0], nc = c + d[1];
-                    let foundEnemy = false;
-                    let enemyPos = null;
+                    let nr = r + d[0], nc = c + d[1], foundEnemy = false, enemyPos = null;
                     while (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
-                        const target = state[nr][nc];
+                        const target = boardState[nr][nc];
                         if (!foundEnemy) {
                             if (!target) moves.push({ r: nr, c: nc });
                             else if (target.player !== piece.player) { foundEnemy = true; enemyPos = { r: nr, c: nc }; }
@@ -438,12 +254,11 @@
                 const moveDirs = piece.player === 1 ? [[-1, -1], [-1, 1]] : [[1, -1], [1, 1]];
                 moveDirs.forEach(d => {
                     let nr = r + d[0], nc = c + d[1];
-                    if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8 && !state[nr][nc]) moves.push({ r: nr, c: nc });
+                    if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8 && !boardState[nr][nc]) moves.push({ r: nr, c: nc });
                 });
                 dirs.forEach(d => {
-                    let nr = r + d[0], nc = c + d[1];
-                    let jr = r + d[0] * 2, jc = c + d[1] * 2;
-                    if (jr >= 0 && jr < 8 && jc >= 0 && jc < 8 && state[nr][nc] && state[nr][nc].player !== piece.player && !state[jr][jc]) {
+                    let nr = r + d[0], nc = c + d[1], jr = r + d[0]*2, jc = c + d[1]*2;
+                    if (jr >= 0 && jr < 8 && jc >= 0 && jc < 8 && boardState[nr][nc] && boardState[nr][nc].player !== piece.player && !boardState[jr][jc]) {
                         moves.push({ r: jr, c: jc, capture: { r: nr, c: nc } });
                     }
                 });
@@ -451,167 +266,134 @@
             return moves;
         }
 
-        function executeMove(fR, fC, tR, tC, capture) {
-            // Start timer on first move
-            if (!timerRunning) startTimer();
+        function handleCellClick(r, c) {
+            if (matchId && myPlayerNum !== currentPlayer) return;
+            const piece = boardState[r][c];
+            if (piece && piece.player === currentPlayer) {
+                selectedPiece = { r, c };
+                validMoves = calculateMoves(r, c);
+                // Forced Capture Logic
+                let hasGlobalCapture = false;
+                for(let i=0; i<8; i++) for(let j=0; j<8; j++) {
+                    if(boardState[i][j]?.player === currentPlayer && calculateMoves(i,j).some(m => m.capture)) hasGlobalCapture = true;
+                }
+                if (hasGlobalCapture) validMoves = validMoves.filter(m => m.capture);
+                render();
+            } else if (selectedPiece) {
+                const move = validMoves.find(m => m.r === r && m.c === c);
+                if (move) executeMove(selectedPiece.r, selectedPiece.c, r, c, move.capture);
+            }
+        }
 
+        async function executeMove(fR, fC, tR, tC, capture) {
             const piece = boardState[fR][fC];
             if (capture) {
-                const capturedPiece = boardState[capture.r][capture.c];
+                const enemy = boardState[capture.r][capture.c];
                 const op = operators[tR][tC];
-                let points = 0;
-                if (op === '+') points = piece.val + capturedPiece.val;
-                else if (op === '-') points = piece.val - capturedPiece.val;
-                else if (op === 'x') points = piece.val * capturedPiece.val;
-                else if (op === '÷') points = capturedPiece.val !== 0 ? Math.floor(piece.val / capturedPiece.val) : 0;
-                
-                scores[currentPlayer] += points * (piece.isDama ? 2 : 1);
+                let pts = 0;
+                if (op === '+') pts = piece.val + enemy.val;
+                else if (op === '-') pts = piece.val - enemy.val;
+                else if (op === 'x') pts = piece.val * enemy.val;
+                else if (op === '÷') pts = enemy.val !== 0 ? Math.floor(piece.val / enemy.val) : 0;
+                scores[currentPlayer] += pts * (piece.isDama ? 2 : 1);
                 boardState[capture.r][capture.c] = null;
             }
-
             boardState[tR][tC] = piece;
             boardState[fR][fC] = null;
+            if (!piece.isDama && ((currentPlayer === 1 && tR === 0) || (currentPlayer === 2 && tR === 7))) piece.isDama = true;
 
-            if (!piece.isDama && ((currentPlayer === 1 && tR === 0) || (currentPlayer === 2 && tR === 7))) {
-                piece.isDama = true;
-            }
-
-            if (capture) {
-                const nextMoves = calculateMoves(tR, tC, boardState).filter(m => m.capture);
-                if (nextMoves.length > 0) {
-                    mustCaptureAgain = { r: tR, c: tC };
-                    selectedPiece = { r: tR, c: tC, ...piece };
-                    validMoves = nextMoves;
-                    if (matchId && db) syncOnline();
-                    render();
-                    return;
-                }
-            }
-
-            mustCaptureAgain = null;
             currentPlayer = currentPlayer === 1 ? 2 : 1;
             selectedPiece = null;
             validMoves = [];
             
-            checkWinConditions();
-            if (matchId && db) syncOnline();
+            if (matchId && db) {
+                await db.doc(`artifacts/${appId}/public/data/matches/${matchId}`).update({
+                    board: JSON.stringify(boardState),
+                    scores,
+                    currentPlayer
+                });
+            }
             render();
         }
 
-        function checkWinConditions() {
-            let p1Pieces = 0, p2Pieces = 0;
+        function render() {
+            const board = document.getElementById('board');
+            board.innerHTML = '';
             for (let r = 0; r < 8; r++) {
                 for (let c = 0; c < 8; c++) {
-                    if (boardState[r][c]?.player === 1) p1Pieces++;
-                    if (boardState[r][c]?.player === 2) p2Pieces++;
+                    const cell = document.createElement('div');
+                    cell.className = `cell ${(r + c) % 2 !== 0 ? 'dark' : 'light'}`;
+                    cell.innerText = operators[r][c];
+                    cell.onclick = () => handleCellClick(r, c);
+                    const p = boardState[r][c];
+                    if (p) {
+                        const pDiv = document.createElement('div');
+                        pDiv.className = `pitsa ${p.player === 1 ? 'blue' : 'red'} ${p.isDama ? 'dama' : ''}`;
+                        if (selectedPiece && selectedPiece.r === r && selectedPiece.c === c) pDiv.classList.add('selected');
+                        pDiv.innerText = p.val;
+                        cell.appendChild(pDiv);
+                    }
+                    if (validMoves.some(m => m.r === r && m.c === c)) {
+                        const dot = document.createElement('div');
+                        dot.className = 'move-dot';
+                        cell.appendChild(dot);
+                    }
+                    board.appendChild(cell);
                 }
             }
-            if (p1Pieces === 0 || p2Pieces === 0) {
-                endGame(p1Pieces === 0 ? "Red cleared the board!" : "Blue cleared the board!");
-            }
+            document.getElementById('score1').innerText = scores[1];
+            document.getElementById('score2').innerText = scores[2];
+            document.getElementById('turn-text').innerText = currentPlayer === 1 ? "Blue" : "Red";
+            document.getElementById('turn-box').className = `p-6 rounded-[2rem] text-center shadow-lg transition-all ${currentPlayer === 1 ? 'bg-blue-600' : 'bg-red-600'}`;
+            document.getElementById('card1').className = `text-center bg-blue-50 p-3 rounded-2xl border-2 min-w-[90px] ${currentPlayer === 1 ? 'border-blue-400 scale-105' : 'border-transparent'}`;
+            document.getElementById('card2').className = `text-center bg-red-50 p-3 rounded-2xl border-2 min-w-[90px] ${currentPlayer === 2 ? 'border-red-400 scale-105' : 'border-transparent'}`;
         }
 
-        function endGame(reason) {
-            gameOver = true;
-            if (timerInterval) clearInterval(timerInterval);
-            
-            const winner = scores[1] > scores[2] ? 1 : (scores[2] > scores[1] ? 2 : 0);
-            const modal = document.getElementById('winner-modal');
-            const title = document.getElementById('winner-title');
-            const icon = document.getElementById('winner-icon');
-            
-            document.getElementById('final-score-1').innerText = scores[1];
-            document.getElementById('final-score-2').innerText = scores[2];
-            
-            if (winner === 1) { title.innerText = "Blue Player Wins!"; icon.innerText = "💙🏆"; }
-            else if (winner === 2) { title.innerText = "Red Player Wins!"; icon.innerText = "❤️🏆"; }
-            else { title.innerText = "It's a Draw!"; icon.innerText = "🤝"; }
-            
-            document.getElementById('winner-reason').innerText = reason;
-            modal.style.display = 'flex';
-        }
-
-        async function syncOnline() {
-            if (!db || !auth.currentUser || !matchId) return;
-            const ref = db.doc(`artifacts/${appId}/public/data/matches/${matchId}`);
-            await ref.update({
-                board: JSON.stringify(boardState),
-                scores,
-                currentPlayer,
-                timerSeconds,
-                timerRunning,
-                gameOver,
-                lastUpdate: firebase.firestore.FieldValue.serverTimestamp()
-            });
-        }
-
-        window.hostGame = async function() {
-            if (!isOnline) return;
+        // Multiplayer Handlers
+        window.openModal = () => document.getElementById('multiplayer-modal').style.display = 'flex';
+        window.closeModal = () => document.getElementById('multiplayer-modal').style.display = 'none';
+        
+        async function hostGame() {
+            if (!isOnline) return alert("Offline mode active. Check your connection.");
             const code = Math.random().toString(36).substring(2, 8).toUpperCase();
-            document.getElementById('mp-initial').classList.add('hidden');
+            matchId = code; myPlayerNum = 1;
+            document.getElementById('mp-controls').classList.add('hidden');
             document.getElementById('mp-waiting').classList.remove('hidden');
             document.getElementById('display-code').innerText = code;
-            try {
-                initBoard();
-                scores = { 1: 0, 2: 0 };
-                currentPlayer = 1;
-                await db.doc(`artifacts/${appId}/public/data/matches/${code}`).set({
-                    board: JSON.stringify(boardState), 
-                    scores, 
-                    currentPlayer, 
-                    timerSeconds: 1200,
-                    timerRunning: false,
-                    status: 'waiting',
-                    createdAt: firebase.firestore.FieldValue.serverTimestamp()
-                });
-                matchId = code; myPlayerNum = 1;
-                listenToMatch(code);
-            } catch (err) { cancelMultiplayer(); }
-        };
+            await db.doc(`artifacts/${appId}/public/data/matches/${code}`).set({
+                board: JSON.stringify(boardState),
+                scores: { 1: 0, 2: 0 },
+                currentPlayer: 1,
+                status: 'waiting'
+            });
+            listen(code);
+        }
 
-        window.joinGame = async function() {
-            if (!isOnline) return;
-            const code = document.getElementById('join-code').value.trim().toUpperCase();
+        async function joinGame() {
+            const code = document.getElementById('join-code').value.toUpperCase();
             if (code.length !== 6) return;
+            matchId = code; myPlayerNum = 2;
             const ref = db.doc(`artifacts/${appId}/public/data/matches/${code}`);
-            try {
-                const snap = await ref.get();
-                if (!snap.exists) return alert("Code not found");
-                await ref.set({ status: 'active', lastJoined: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
-                matchId = code; myPlayerNum = 2;
-                listenToMatch(code);
-            } catch (err) { alert("Join failed"); }
-        };
+            const snap = await ref.get();
+            if (!snap.exists) return alert("Room not found");
+            await ref.update({ status: 'active' });
+            closeModal();
+            listen(code);
+        }
 
-        function listenToMatch(code) {
-            if (unsubscribeMatch) unsubscribeMatch();
-            unsubscribeMatch = db.doc(`artifacts/${appId}/public/data/matches/${code}`).onSnapshot(doc => {
+        function listen(code) {
+            db.doc(`artifacts/${appId}/public/data/matches/${code}`).onSnapshot(doc => {
                 const data = doc.data();
-                if (!data) return;
-                if (data.status === 'active') { closeModal(); document.getElementById('find-online-btn').disabled = true; }
-                if (data.gameOver && !gameOver) { scores = data.scores; endGame("Game Ended Online"); }
-                if (data.timerRunning && !timerRunning) startTimer();
-                if (data.currentPlayer !== myPlayerNum) {
-                    boardState = JSON.parse(data.board);
-                    scores = data.scores;
-                    currentPlayer = data.currentPlayer;
-                    timerSeconds = data.timerSeconds;
-                    updateTimerDisplay();
-                    render();
-                }
+                if (data.status === 'active') closeModal();
+                boardState = JSON.parse(data.board);
+                scores = data.scores;
+                currentPlayer = data.currentPlayer;
+                render();
             });
         }
-
-        function resetLocalGame() {
-            if (unsubscribeMatch) unsubscribeMatch();
-            matchId = null; myPlayerNum = null;
-            document.getElementById('find-online-btn').disabled = false;
-            initBoard();
-        }
-
-        window.openMultiplayerModal = () => document.getElementById('multiplayer-modal').style.display = 'flex';
-        window.closeModal = () => document.getElementById('multiplayer-modal').style.display = 'none';
-        window.cancelMultiplayer = () => { if(unsubscribeMatch) unsubscribeMatch(); matchId = null; closeModal(); };
+        
+        function resetGame() { location.reload(); }
+        function cancelMultiplayer() { location.reload(); }
     </script>
 </body>
 </html>
