@@ -261,6 +261,10 @@
                         isOnline = true;
                         statusText.innerText = "Online - Ready";
                         statusText.className = "text-[10px] font-bold uppercase tracking-widest text-green-500 mb-6 text-center";
+                    } else {
+                        isOnline = false;
+                        statusText.innerText = "Connecting...";
+                        statusText.className = "text-[10px] font-bold uppercase tracking-widest text-orange-500 mb-6 text-center";
                     }
                 });
 
@@ -271,17 +275,10 @@
                     await auth.signInAnonymously();
                 }
 
-                // Reliability check: if after 2s still "Checking", update status
-                setTimeout(() => {
-                    if (!isOnline) {
-                        statusText.innerText = "Server Slow... Click Host to Retry";
-                        statusText.className = "text-[10px] font-bold uppercase tracking-widest text-orange-400 mb-6 text-center";
-                    }
-                }, 2000);
-
             } catch (e) {
                 console.error("Firebase Error:", e);
-                statusText.innerText = "Offline Mode - Check Internet";
+                isOnline = false;
+                statusText.innerText = "Authentication Error - Check Settings";
                 statusText.className = "text-[10px] font-bold uppercase tracking-widest text-red-500 mb-6 text-center";
             }
         }
@@ -560,8 +557,8 @@
         }
 
         window.hostGame = async function() {
-            if (!db) {
-                alert("Server connecting... Please wait or refresh.");
+            if (!db || !isOnline) {
+                alert("Server not connected yet. Please wait a moment.");
                 tryConnectFirebase();
                 return;
             }
@@ -586,12 +583,12 @@
             } catch (err) { 
                 console.error(err);
                 cancelMultiplayer(); 
-                alert("Could not create match. Try again.");
+                alert("Could not create match. Ensure Firestore is enabled.");
             }
         };
 
         window.joinGame = async function() {
-            if (!db) return alert("Server not ready.");
+            if (!db || !isOnline) return alert("Server not ready.");
             const codeInput = document.getElementById('join-code');
             const code = codeInput.value.trim().toUpperCase();
             if (code.length !== 6) return alert("Enter 6-digit code");
