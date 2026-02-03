@@ -92,7 +92,7 @@
         <div class="bg-white p-8 rounded-3xl shadow-2xl max-w-sm w-full text-center border-4 border-yellow-400">
             <div class="text-5xl mb-4">🏆</div>
             <h2 class="text-3xl font-black mb-2 text-slate-800" id="winner-title">Blue Wins!</h2>
-            <p id="winner-stats" class="text-slate-500 mb-6 font-bold uppercase tracking-widest">Final Score: 0 - 0</p>
+            <p id="winner-stats" class="text-slate-500 mb-6 font-bold uppercase tracking-widest whitespace-pre-line">Final Score: 0 - 0</p>
             <button onclick="location.reload()" class="w-full bg-slate-900 text-white py-4 rounded-2xl font-black hover:bg-slate-800 transition-all active:scale-95">New Match</button>
         </div>
     </div>
@@ -148,10 +148,18 @@
     </div>
 
     <script>
-        // Configuration
-        const appId = typeof __app_id !== 'undefined' ? __app_id : 'damath-tournament';
-        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        // Updated Firebase Configuration from User
+        const firebaseConfig = {
+            apiKey: "AIzaSyA-_jkxLGS255XbhxYIm3WxS3wVOeD-cXE",
+            authDomain: "tournament-damath.firebaseapp.com",
+            projectId: "tournament-damath",
+            storageBucket: "tournament-damath.firebasestorage.app",
+            messagingSenderId: "994042280890",
+            appId: "1:994042280890:web:78cf36127de438f731bb83",
+            measurementId: "G-ER585Y49RN"
+        };
         
+        const appId = 'tournament-damath-v1';
         let db, auth;
         let boardState = [];
         let currentPlayer = 1;
@@ -178,12 +186,8 @@
 
         window.onload = () => {
             initGame();
-            if (firebaseConfig) {
-                connectFirebase();
-            } else {
-                setOffline();
-            }
-            setTimeout(() => { if (!isOnline) setOffline(); }, 5000);
+            connectFirebase();
+            setTimeout(() => { if (!isOnline) setOffline(); }, 8000);
         };
 
         function setOffline() {
@@ -202,13 +206,18 @@
                 if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
                 auth = firebase.auth();
                 db = firebase.firestore();
+                
+                // Sign in anonymously to enable Firestore access
                 await auth.signInAnonymously();
+                
                 isOnline = true;
                 const pill = document.getElementById('connection-pill');
                 pill.innerText = "Online";
                 pill.className = "px-3 py-1 bg-green-100 text-green-600 text-[10px] font-black rounded-full uppercase";
                 document.getElementById('mp-status').innerText = "Connected - Ready to Play";
+                document.getElementById('mp-status').className = "text-[10px] font-bold uppercase tracking-widest text-green-500 mb-6 text-center";
             } catch (e) {
+                console.error("Firebase connection error:", e);
                 setOffline();
             }
         }
@@ -260,6 +269,7 @@
             document.getElementById('winner-modal').style.display = 'flex';
             document.getElementById('winner-title').innerText = winner === "Draw" ? "It's a Draw!" : `${winner} Wins!`;
             document.getElementById('winner-stats').innerText = `Final Score: Blue ${scores[1]} - Red ${scores[2]}\n${reason}`;
+            syncOnline();
         }
 
         function checkPieceCounts() {
@@ -333,7 +343,6 @@
             const forced = getGlobalForcedCaptures();
             const piece = boardState[r][c];
 
-            // If we are in the middle of a chain capture, we can only select the active piece
             if (currentChainCapture) {
                 if (r === currentChainCapture.r && c === currentChainCapture.c) {
                     selectedPiece = { r, c };
@@ -347,10 +356,7 @@
             }
 
             if (piece && piece.player === currentPlayer) {
-                if (forced.length > 0 && !forced.some(f => f.r === r && f.c === c)) {
-                    // Alert or indicate forced capture elsewhere?
-                    return;
-                }
+                if (forced.length > 0 && !forced.some(f => f.r === r && f.c === c)) return;
                 selectedPiece = { r, c };
                 validMoves = calculateMoves(r, c);
                 if (forced.length > 0) validMoves = validMoves.filter(m => m.capture);
@@ -363,7 +369,6 @@
 
         async function executeMove(fR, fC, tR, tC, capture) {
             const piece = boardState[fR][fC];
-            let scored = false;
             
             if (capture) {
                 const enemy = boardState[capture.r][capture.c];
@@ -376,18 +381,15 @@
                 
                 scores[currentPlayer] += pts * (piece.isDama ? 2 : 1);
                 boardState[capture.r][capture.c] = null;
-                scored = true;
             }
 
             boardState[tR][tC] = piece;
             boardState[fR][fC] = null;
 
-            // Promotion check
             if (!piece.isDama && ((currentPlayer === 1 && tR === 0) || (currentPlayer === 2 && tR === 7))) {
                 piece.isDama = true;
             }
 
-            // Chain capture check
             if (capture) {
                 const nextCaptures = calculateMoves(tR, tC, true).filter(m => m.capture);
                 if (nextCaptures.length > 0) {
@@ -412,12 +414,13 @@
 
         async function syncOnline() {
             if (matchId && db) {
-                await db.doc(`artifacts/${appId}/public/data/matches/${matchId}`).update({
+                const path = `artifacts/${appId}/public/data/matches/${matchId}`;
+                await db.doc(path).update({
                     board: JSON.stringify(boardState),
                     scores,
                     currentPlayer,
                     gameActive
-                }).catch(() => {});
+                }).catch(e => console.error("Sync error", e));
             }
         }
 
@@ -460,13 +463,15 @@
         window.closeModal = () => document.getElementById('multiplayer-modal').style.display = 'none';
         
         async function hostGame() {
-            if (!isOnline) return alert("Offline mode.");
+            if (!isOnline) return alert("Multiplayer unavailable: Connection failed.");
             const code = Math.random().toString(36).substring(2, 8).toUpperCase();
             matchId = code; myPlayerNum = 1;
             document.getElementById('mp-controls').classList.add('hidden');
             document.getElementById('mp-waiting').classList.remove('hidden');
             document.getElementById('display-code').innerText = code;
-            await db.doc(`artifacts/${appId}/public/data/matches/${code}`).set({
+            
+            const path = `artifacts/${appId}/public/data/matches/${code}`;
+            await db.doc(path).set({
                 board: JSON.stringify(boardState),
                 scores: { 1: 0, 2: 0 },
                 currentPlayer: 1,
@@ -480,17 +485,20 @@
             const code = document.getElementById('join-code').value.toUpperCase();
             if (code.length !== 6) return;
             matchId = code; myPlayerNum = 2;
-            const ref = db.doc(`artifacts/${appId}/public/data/matches/${code}`);
+            const path = `artifacts/${appId}/public/data/matches/${code}`;
+            const ref = db.doc(path);
             const snap = await ref.get();
-            if (!snap.exists) return alert("Room not found");
+            if (!snap.exists) return alert("Match code not found.");
             await ref.update({ status: 'active' });
             closeModal();
             listen(code);
         }
 
         function listen(code) {
-            db.doc(`artifacts/${appId}/public/data/matches/${code}`).onSnapshot(doc => {
+            const path = `artifacts/${appId}/public/data/matches/${code}`;
+            db.doc(path).onSnapshot(doc => {
                 const data = doc.data();
+                if (!data) return;
                 if (data.status === 'active') closeModal();
                 boardState = JSON.parse(data.board);
                 scores = data.scores;
@@ -502,7 +510,7 @@
                     document.getElementById('winner-title').innerText = `${winText} Wins!`;
                 }
                 render();
-            });
+            }, err => console.error("Listener error:", err));
         }
         
         function resetGame() { location.reload(); }
