@@ -184,7 +184,6 @@
         async function tryConnectFirebase() {
             const statusText = document.getElementById('mp-status');
 
-            // Robust check for configuration strings provided by the environment
             if (typeof __firebase_config !== 'undefined' && __firebase_config) {
                 try {
                     const config = JSON.parse(__firebase_config);
@@ -192,7 +191,7 @@
                     auth = firebase.auth();
                     db = firebase.firestore();
                     
-                    statusText.innerText = "Authenticating with server...";
+                    statusText.innerText = "Authenticating...";
                     
                     const performAuth = async () => {
                         if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
@@ -207,19 +206,17 @@
                     auth.onAuthStateChanged((user) => {
                         if (user) {
                             isOnline = true;
-                            statusText.innerText = "Ready to Play Online";
+                            statusText.innerText = "Online - Connected";
                             statusText.className = "text-xs text-green-600 mb-4 font-bold";
                         }
                     });
                 } catch (e) {
                     console.error("Firebase Connection Error:", e);
-                    statusText.innerText = "Connection Error. Playing Local Mode.";
+                    statusText.innerText = "Offline Mode - Server Error";
                 }
             } else {
-                // If config is missing, inform the user and provide a clear status
-                statusText.innerText = "Searching for game server...";
-                // Retry after a short delay in case environment variables aren't injected yet
-                setTimeout(tryConnectFirebase, 2000);
+                statusText.innerText = "Initialising connection...";
+                setTimeout(tryConnectFirebase, 1000);
             }
         }
 
@@ -328,9 +325,7 @@
         }
 
         window.hostGame = async function() {
-            if (!isOnline && (!auth || !auth.currentUser)) {
-                return alert("The connection to the online server is still being established. Please wait a moment.");
-            }
+            if (!isOnline) return alert("Waiting for server connection...");
             const code = Math.floor(100000 + Math.random() * 900000).toString();
             
             document.getElementById('mp-initial').classList.add('hidden');
@@ -361,7 +356,7 @@
         };
 
         window.joinGame = async function() {
-            if (!isOnline && (!auth || !auth.currentUser)) return alert("Still connecting to the game server...");
+            if (!isOnline) return alert("Waiting for server connection...");
             const code = document.getElementById('join-code').value.trim();
             if (code.length !== 6) return alert("Enter 6-digit code.");
             
