@@ -44,6 +44,7 @@
             z-index: 10;
             box-shadow: 0 4px 0 rgba(0,0,0,0.3);
             position: relative;
+            transition: transform 0.2s;
         }
         .pitsa.blue { background: radial-gradient(circle at 30% 30%, #3b82f6, #1d4ed8); }
         .pitsa.red { background: radial-gradient(circle at 30% 30%, #ef4444, #b91c1c); }
@@ -51,7 +52,7 @@
         .pitsa.dama::after { content: '★'; position: absolute; top: -2px; right: -2px; color: #fbbf24; font-size: 1.2rem; text-shadow: 0 0 3px black; }
         .move-dot { width: 14px; height: 14px; background: rgba(251, 191, 36, 0.8); border-radius: 50%; border: 2px solid white; }
         
-        #multiplayer-modal {
+        #multiplayer-modal, #winner-modal {
             display: none;
             position: fixed;
             inset: 0;
@@ -64,6 +65,7 @@
 </head>
 <body class="bg-slate-50">
 
+    <!-- Multiplayer Modal -->
     <div id="multiplayer-modal" class="p-4">
         <div class="bg-white p-8 rounded-3xl shadow-2xl max-w-sm w-full border border-slate-200">
             <h2 class="text-2xl font-black mb-1 text-slate-800 text-center">Multiplayer</h2>
@@ -82,6 +84,16 @@
             </div>
             
             <button onclick="skipConnection()" class="w-full mt-6 text-slate-400 text-[10px] uppercase font-black tracking-widest hover:text-blue-500 transition-colors">⚠️ Play Offline (Skip Server)</button>
+        </div>
+    </div>
+
+    <!-- Winner Modal -->
+    <div id="winner-modal" class="p-4">
+        <div class="bg-white p-8 rounded-3xl shadow-2xl max-w-sm w-full text-center border-4 border-yellow-400">
+            <div class="text-5xl mb-4">🏆</div>
+            <h2 class="text-3xl font-black mb-2 text-slate-800" id="winner-title">Blue Wins!</h2>
+            <p id="winner-stats" class="text-slate-500 mb-6 font-bold uppercase tracking-widest">Final Score: 0 - 0</p>
+            <button onclick="location.reload()" class="w-full bg-slate-900 text-white py-4 rounded-2xl font-black hover:bg-slate-800 transition-all active:scale-95">New Match</button>
         </div>
     </div>
 
@@ -128,7 +140,7 @@
                 <div class="bg-slate-100 p-4 rounded-2xl">
                     <p class="text-[10px] font-black text-slate-400 uppercase mb-2">Rules</p>
                     <p class="text-[11px] text-slate-600 leading-relaxed italic">
-                        "Forced Capture" is active. You must take an opponent's piece if the move is available.
+                        Forced capture is mandatory. Dama pieces can fly over empty tiles to capture. Timer is 20:00.
                     </p>
                 </div>
             </div>
@@ -146,10 +158,12 @@
         let scores = { 1: 0, 2: 0 };
         let selectedPiece = null;
         let validMoves = [];
-        let timer = 1200;
+        let timer = 1200; // 20 minutes
         let matchId = null;
         let myPlayerNum = null;
         let isOnline = false;
+        let gameActive = true;
+        let currentChainCapture = null;
 
         const operators = [
             ['', '+', '', '-', '', 'x', '', '÷'],
@@ -169,22 +183,17 @@
             } else {
                 setOffline();
             }
-            
-            // Auto-fallback timer
-            setTimeout(() => {
-                if (!isOnline) {
-                    setOffline();
-                }
-            }, 5000);
+            setTimeout(() => { if (!isOnline) setOffline(); }, 5000);
         };
 
         function setOffline() {
             const status = document.getElementById('mp-status');
-            status.innerText = "Offline Mode Active";
-            status.className = "text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-6 text-center";
+            if (status) status.innerText = "Offline Mode Active";
             const pill = document.getElementById('connection-pill');
-            pill.innerText = "Offline";
-            pill.className = "px-3 py-1 bg-slate-100 text-slate-500 text-[10px] font-black rounded-full uppercase";
+            if (pill) {
+                pill.innerText = "Offline";
+                pill.className = "px-3 py-1 bg-slate-100 text-slate-500 text-[10px] font-black rounded-full uppercase";
+            }
             isOnline = false;
         }
 
@@ -193,37 +202,25 @@
                 if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
                 auth = firebase.auth();
                 db = firebase.firestore();
-
-                const initAuth = async () => {
-                    if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                        await auth.signInWithCustomToken(__initial_auth_token);
-                    } else {
-                        await auth.signInAnonymously();
-                    }
-                };
-                
-                await initAuth();
+                await auth.signInAnonymously();
                 isOnline = true;
                 const pill = document.getElementById('connection-pill');
                 pill.innerText = "Online";
                 pill.className = "px-3 py-1 bg-green-100 text-green-600 text-[10px] font-black rounded-full uppercase";
                 document.getElementById('mp-status').innerText = "Connected - Ready to Play";
-                document.getElementById('mp-status').className = "text-[10px] font-bold uppercase tracking-widest text-green-500 mb-6 text-center";
             } catch (e) {
-                console.error("Firebase connection failed", e);
                 setOffline();
             }
         }
 
-        function skipConnection() {
-            setOffline();
-            closeModal();
-        }
+        function skipConnection() { setOffline(); closeModal(); }
 
         function initGame() {
             timer = 1200;
             currentPlayer = 1;
             scores = { 1: 0, 2: 0 };
+            gameActive = true;
+            currentChainCapture = null;
             boardState = Array(8).fill(null).map(() => Array(8).fill(null));
             const setup = [
                 {r:0,c:1},{r:0,c:3},{r:0,c:5},{r:0,c:7},
@@ -234,20 +231,47 @@
                 {r:7,c:0},{r:7,c:2},{r:7,c:4},{r:7,c:6}
             ];
             setup.forEach(p => {
-                const val = Math.floor(Math.random() * 12) * (Math.random() > 0.5 ? 1 : -1);
+                const val = Math.floor(Math.random() * 12);
                 boardState[p.r][p.c] = { val, player: p.r < 3 ? 2 : 1, isDama: false };
             });
             render();
-            setInterval(() => {
+            startTimer();
+        }
+
+        function startTimer() {
+            const interval = setInterval(() => {
+                if (!gameActive) return clearInterval(interval);
                 if (timer > 0) {
                     timer--;
                     const m = Math.floor(timer/60), s = timer%60;
                     document.getElementById('timer').innerText = `${m}:${s.toString().padStart(2,'0')}`;
+                } else {
+                    endGame("Time is up!");
+                    clearInterval(interval);
                 }
             }, 1000);
         }
 
-        function calculateMoves(r, c) {
+        function endGame(reason) {
+            gameActive = false;
+            let winner = scores[1] > scores[2] ? "Blue" : "Red";
+            if (scores[1] === scores[2]) winner = "Draw";
+            
+            document.getElementById('winner-modal').style.display = 'flex';
+            document.getElementById('winner-title').innerText = winner === "Draw" ? "It's a Draw!" : `${winner} Wins!`;
+            document.getElementById('winner-stats').innerText = `Final Score: Blue ${scores[1]} - Red ${scores[2]}\n${reason}`;
+        }
+
+        function checkPieceCounts() {
+            let blueCount = 0, redCount = 0;
+            for(let r=0; r<8; r++) for(let c=0; c<8; c++) {
+                if(boardState[r][c]?.player === 1) blueCount++;
+                if(boardState[r][c]?.player === 2) redCount++;
+            }
+            if(blueCount === 0 || redCount === 0) endGame("No pieces remaining!");
+        }
+
+        function calculateMoves(r, c, onlyCaptures = false) {
             const piece = boardState[r][c];
             if (!piece) return [];
             const moves = [];
@@ -255,28 +279,34 @@
             
             if (piece.isDama) {
                 dirs.forEach(d => {
-                    let nr = r + d[0], nc = c + d[1], foundEnemy = false, enemyPos = null;
+                    let nr = r + d[0], nc = c + d[1];
+                    let jumpedEnemy = null;
                     while (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
                         const target = boardState[nr][nc];
-                        if (!foundEnemy) {
-                            if (!target) moves.push({ r: nr, c: nc });
-                            else if (target.player !== piece.player) { foundEnemy = true; enemyPos = { r: nr, c: nc }; }
-                            else break;
+                        if (!jumpedEnemy) {
+                            if (!target) {
+                                if (!onlyCaptures) moves.push({ r: nr, c: nc });
+                            } else if (target.player !== piece.player) {
+                                jumpedEnemy = { r: nr, c: nc };
+                            } else break;
                         } else {
-                            if (!target) moves.push({ r: nr, c: nc, capture: enemyPos });
+                            if (!target) moves.push({ r: nr, c: nc, capture: jumpedEnemy });
                             else break;
                         }
                         nr += d[0]; nc += d[1];
                     }
                 });
             } else {
-                const moveDirs = piece.player === 1 ? [[-1, -1], [-1, 1]] : [[1, -1], [1, 1]];
-                moveDirs.forEach(d => {
-                    let nr = r + d[0], nc = c + d[1];
-                    if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8 && !boardState[nr][nc]) moves.push({ r: nr, c: nc });
-                });
+                if (!onlyCaptures) {
+                    const forwardDirs = piece.player === 1 ? [[-1, -1], [-1, 1]] : [[1, -1], [1, 1]];
+                    forwardDirs.forEach(d => {
+                        let nr = r + d[0], nc = c + d[1];
+                        if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8 && !boardState[nr][nc]) moves.push({ r: nr, c: nc });
+                    });
+                }
                 dirs.forEach(d => {
-                    let nr = r + d[0], nc = c + d[1], jr = r + d[0]*2, jc = c + d[1]*2;
+                    let nr = r + d[0], nc = c + d[1];
+                    let jr = r + d[0]*2, jc = c + d[1]*2;
                     if (jr >= 0 && jr < 8 && jc >= 0 && jc < 8 && boardState[nr][nc] && boardState[nr][nc].player !== piece.player && !boardState[jr][jc]) {
                         moves.push({ r: jr, c: jc, capture: { r: nr, c: nc } });
                     }
@@ -285,18 +315,45 @@
             return moves;
         }
 
+        function getGlobalForcedCaptures() {
+            const allCaptures = [];
+            for(let r=0; r<8; r++) for(let c=0; c<8; c++) {
+                if(boardState[r][c]?.player === currentPlayer) {
+                    const m = calculateMoves(r, c, true).filter(move => move.capture);
+                    if(m.length > 0) allCaptures.push({r, c, moves: m});
+                }
+            }
+            return allCaptures;
+        }
+
         function handleCellClick(r, c) {
+            if (!gameActive) return;
             if (matchId && myPlayerNum !== currentPlayer) return;
+
+            const forced = getGlobalForcedCaptures();
             const piece = boardState[r][c];
+
+            // If we are in the middle of a chain capture, we can only select the active piece
+            if (currentChainCapture) {
+                if (r === currentChainCapture.r && c === currentChainCapture.c) {
+                    selectedPiece = { r, c };
+                    validMoves = calculateMoves(r, c, true).filter(m => m.capture);
+                    render();
+                } else if (selectedPiece && selectedPiece.r === currentChainCapture.r) {
+                    const move = validMoves.find(m => m.r === r && m.c === c);
+                    if (move) executeMove(selectedPiece.r, selectedPiece.c, r, c, move.capture);
+                }
+                return;
+            }
+
             if (piece && piece.player === currentPlayer) {
+                if (forced.length > 0 && !forced.some(f => f.r === r && f.c === c)) {
+                    // Alert or indicate forced capture elsewhere?
+                    return;
+                }
                 selectedPiece = { r, c };
                 validMoves = calculateMoves(r, c);
-                // Forced Capture Logic
-                let hasGlobalCapture = false;
-                for(let i=0; i<8; i++) for(let j=0; j<8; j++) {
-                    if(boardState[i][j]?.player === currentPlayer && calculateMoves(i,j).some(m => m.capture)) hasGlobalCapture = true;
-                }
-                if (hasGlobalCapture) validMoves = validMoves.filter(m => m.capture);
+                if (forced.length > 0) validMoves = validMoves.filter(m => m.capture);
                 render();
             } else if (selectedPiece) {
                 const move = validMoves.find(m => m.r === r && m.c === c);
@@ -306,33 +363,62 @@
 
         async function executeMove(fR, fC, tR, tC, capture) {
             const piece = boardState[fR][fC];
+            let scored = false;
+            
             if (capture) {
                 const enemy = boardState[capture.r][capture.c];
                 const op = operators[tR][tC];
                 let pts = 0;
                 if (op === '+') pts = piece.val + enemy.val;
-                else if (op === '-') pts = piece.val - enemy.val;
+                else if (op === '-') pts = Math.abs(piece.val - enemy.val);
                 else if (op === 'x') pts = piece.val * enemy.val;
                 else if (op === '÷') pts = enemy.val !== 0 ? Math.floor(piece.val / enemy.val) : 0;
+                
                 scores[currentPlayer] += pts * (piece.isDama ? 2 : 1);
                 boardState[capture.r][capture.c] = null;
+                scored = true;
             }
+
             boardState[tR][tC] = piece;
             boardState[fR][fC] = null;
-            if (!piece.isDama && ((currentPlayer === 1 && tR === 0) || (currentPlayer === 2 && tR === 7))) piece.isDama = true;
 
+            // Promotion check
+            if (!piece.isDama && ((currentPlayer === 1 && tR === 0) || (currentPlayer === 2 && tR === 7))) {
+                piece.isDama = true;
+            }
+
+            // Chain capture check
+            if (capture) {
+                const nextCaptures = calculateMoves(tR, tC, true).filter(m => m.capture);
+                if (nextCaptures.length > 0) {
+                    currentChainCapture = { r: tR, c: tC };
+                    selectedPiece = currentChainCapture;
+                    validMoves = nextCaptures;
+                    render();
+                    syncOnline();
+                    return;
+                }
+            }
+
+            currentChainCapture = null;
             currentPlayer = currentPlayer === 1 ? 2 : 1;
             selectedPiece = null;
             validMoves = [];
             
+            checkPieceCounts();
+            render();
+            syncOnline();
+        }
+
+        async function syncOnline() {
             if (matchId && db) {
                 await db.doc(`artifacts/${appId}/public/data/matches/${matchId}`).update({
                     board: JSON.stringify(boardState),
                     scores,
-                    currentPlayer
-                }).catch(e => console.warn("Update skipped (offline/local)"));
+                    currentPlayer,
+                    gameActive
+                }).catch(() => {});
             }
-            render();
         }
 
         function render() {
@@ -344,6 +430,7 @@
                     cell.className = `cell ${(r + c) % 2 !== 0 ? 'dark' : 'light'}`;
                     cell.innerText = operators[r][c];
                     cell.onclick = () => handleCellClick(r, c);
+                    
                     const p = boardState[r][c];
                     if (p) {
                         const pDiv = document.createElement('div');
@@ -368,12 +455,12 @@
             document.getElementById('card2').className = `text-center bg-red-50 p-3 rounded-2xl border-2 min-w-[90px] ${currentPlayer === 2 ? 'border-red-400 scale-105' : 'border-transparent'}`;
         }
 
-        // Multiplayer Handlers
+        // Multiplayer logic
         window.openModal = () => document.getElementById('multiplayer-modal').style.display = 'flex';
         window.closeModal = () => document.getElementById('multiplayer-modal').style.display = 'none';
         
         async function hostGame() {
-            if (!isOnline) return alert("You are currently in Offline Mode. Please refresh to try reconnecting to the server.");
+            if (!isOnline) return alert("Offline mode.");
             const code = Math.random().toString(36).substring(2, 8).toUpperCase();
             matchId = code; myPlayerNum = 1;
             document.getElementById('mp-controls').classList.add('hidden');
@@ -383,13 +470,13 @@
                 board: JSON.stringify(boardState),
                 scores: { 1: 0, 2: 0 },
                 currentPlayer: 1,
-                status: 'waiting'
+                status: 'waiting',
+                gameActive: true
             });
             listen(code);
         }
 
         async function joinGame() {
-            if (!isOnline) return alert("You are currently in Offline Mode.");
             const code = document.getElementById('join-code').value.toUpperCase();
             if (code.length !== 6) return;
             matchId = code; myPlayerNum = 2;
@@ -408,17 +495,17 @@
                 boardState = JSON.parse(data.board);
                 scores = data.scores;
                 currentPlayer = data.currentPlayer;
+                gameActive = data.gameActive;
+                if (!gameActive) {
+                    const winText = scores[1] > scores[2] ? "Blue" : "Red";
+                    document.getElementById('winner-modal').style.display = 'flex';
+                    document.getElementById('winner-title').innerText = `${winText} Wins!`;
+                }
                 render();
             });
         }
         
-        function resetGame() { 
-            if (matchId) {
-                location.reload(); 
-            } else {
-                initGame();
-            }
-        }
+        function resetGame() { location.reload(); }
         function cancelMultiplayer() { location.reload(); }
     </script>
 </body>
