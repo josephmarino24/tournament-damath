@@ -416,7 +416,8 @@
             const ref = db.doc(`artifacts/${appId}/public/data/matches/${code}`);
             try {
                 const snap = await ref.get();
-                if (!snap.exists()) {
+                // FIX: Use .exists (compat SDK uses a property, not a function)
+                if (!snap.exists) {
                     return alert("Match code not found. Please double check the code.");
                 }
                 
