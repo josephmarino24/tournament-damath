@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Tournament Damath Online</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Firebase SDKs (Compat Version) -->
     <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-auth-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/11.0.1/firebase-firestore-compat.js"></script>
@@ -40,7 +39,7 @@
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 1.3rem;
+            font-size: 1.1rem;
             font-weight: 800;
             color: white;
             box-shadow: 0 4px 0 rgba(0,0,0,0.3), inset 0 2px 4px rgba(255,255,255,0.3);
@@ -61,7 +60,7 @@
             text-shadow: 0 0 3px black; 
         }
 
-        #multiplayer-modal {
+        #multiplayer-modal, #winner-modal {
             display: none;
             position: fixed;
             inset: 0;
@@ -78,6 +77,16 @@
         .score-card.active {
             transform: scale(1.02);
             box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+        }
+        
+        .forced-capture-hint {
+            box-shadow: inset 0 0 15px #facc15;
+            animation: pulse-border 1.5s infinite;
+        }
+        @keyframes pulse-border {
+            0% { box-shadow: inset 0 0 5px #facc15; }
+            50% { box-shadow: inset 0 0 20px #facc15; }
+            100% { box-shadow: inset 0 0 5px #facc15; }
         }
     </style>
 </head>
@@ -105,11 +114,6 @@
                 <div class="bg-slate-50 rounded-2xl py-6 mb-6">
                     <h3 id="display-code" class="text-5xl font-mono font-black text-blue-600 tracking-tighter uppercase">------</h3>
                 </div>
-                <div class="flex items-center justify-center space-x-2 text-blue-500">
-                    <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce"></div>
-                    <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
-                    <div class="w-2 h-2 bg-blue-500 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
-                </div>
                 <button onclick="cancelMultiplayer()" class="mt-8 text-red-500 font-black text-xs uppercase tracking-widest hover:text-red-600">Cancel Match</button>
             </div>
             
@@ -117,11 +121,37 @@
         </div>
     </div>
 
+    <!-- Winner Modal -->
+    <div id="winner-modal">
+        <div class="bg-white p-10 rounded-[2.5rem] shadow-2xl max-w-md w-full mx-4 text-center border-4 border-slate-100">
+            <div id="winner-icon" class="text-7xl mb-4">🏆</div>
+            <h2 id="winner-title" class="text-4xl font-black text-slate-900 mb-2 tracking-tighter">Blue Wins!</h2>
+            <p id="winner-reason" class="text-slate-500 font-medium mb-8">Higher score achieved.</p>
+            <div class="flex gap-4 justify-center mb-8">
+                <div class="bg-blue-50 px-6 py-3 rounded-2xl">
+                    <p class="text-[10px] font-black text-blue-500 uppercase">Blue</p>
+                    <p id="final-score-1" class="text-2xl font-mono font-black">0</p>
+                </div>
+                <div class="bg-red-50 px-6 py-3 rounded-2xl">
+                    <p class="text-[10px] font-black text-red-500 uppercase">Red</p>
+                    <p id="final-score-2" class="text-2xl font-mono font-black">0</p>
+                </div>
+            </div>
+            <button onclick="resetLocalGame(); document.getElementById('winner-modal').style.display='none';" class="w-full bg-slate-900 text-white py-4 rounded-2xl font-black hover:bg-slate-800 transition-all active:scale-95">Play Again</button>
+        </div>
+    </div>
+
     <div class="max-w-6xl w-full grid grid-cols-1 lg:grid-cols-12 gap-10">
         <!-- Side Panel -->
         <div class="lg:col-span-4 flex flex-col gap-6">
             <div class="bg-white p-8 rounded-[2rem] shadow-sm border border-slate-200">
-                <h1 class="text-5xl font-black text-slate-900 mb-8 tracking-tighter">DAMATH</h1>
+                <div class="flex justify-between items-start mb-6">
+                    <h1 class="text-5xl font-black text-slate-900 tracking-tighter">DAMATH</h1>
+                    <div class="bg-slate-900 text-white px-4 py-2 rounded-xl text-center min-w-[100px]">
+                        <p id="timer-label" class="text-[8px] font-black uppercase tracking-widest text-slate-400">Waiting...</p>
+                        <p id="timer" class="text-xl font-mono font-black">20:00</p>
+                    </div>
+                </div>
                 
                 <div class="space-y-4">
                     <div id="card1" class="score-card p-5 rounded-2xl bg-blue-50 border-2 border-blue-200 flex justify-between items-center active">
@@ -157,7 +187,7 @@
             <div class="bg-slate-900 p-6 rounded-[2rem] text-white">
                 <p class="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3">System Status</p>
                 <p id="match-status-text" class="text-xs font-medium text-slate-400 leading-relaxed">
-                    Test mode active. You can play locally or invite others via match codes.
+                    Rules: 20m timer starts on first move. Integers (positive/negative) enabled. Force capture active.
                 </p>
             </div>
         </div>
@@ -171,23 +201,17 @@
     </div>
 
     <script>
-        /**
-         * ACTION REQUIRED: 
-         * Replace the object below with your actual Firebase configuration 
-         * from the Firebase Console (Project Settings > General > Your Apps)
-         */
         const MANUAL_FIREBASE_CONFIG = {
-            apiKey: "AIzaSyA-_jkxLGS255XbhxYIm3WxS3wVOeD-cXE",
+            apiKey: "",
             authDomain: "tournament-damath.firebaseapp.com",
             projectId: "tournament-damath",
             storageBucket: "tournament-damath.firebasestorage.app",
             messagingSenderId: "994042280890",
-            appId: "1:994042280890:web:78cf36127de438f731bb83",
-            measurementId: "G-ER585Y49RN"
+            appId: "1:994042280890:web:78cf36127de438f731bb83"
         };
 
         // Global State
-        let db, auth, appId = typeof __app_id !== 'undefined' ? __app_id : 'tournament-damath-v1';
+        let db, auth, appId = typeof __app_id !== 'undefined' ? __app_id : 'tournament-damath-v2';
         let boardState = [];
         let currentPlayer = 1;
         let scores = { 1: 0, 2: 0 };
@@ -197,6 +221,11 @@
         let myPlayerNum = null;
         let unsubscribeMatch = null;
         let isOnline = false;
+        let timerSeconds = 1200; 
+        let timerInterval = null;
+        let timerRunning = false;
+        let mustCaptureAgain = null; 
+        let gameOver = false;
 
         const operators = [
             ['', '+', '', '-', '', 'x', '', '÷'],
@@ -214,52 +243,78 @@
             tryConnectFirebase();
         };
 
+        function startTimer() {
+            if (timerRunning) return;
+            timerRunning = true;
+            document.getElementById('timer-label').innerText = "Time Left";
+            if (timerInterval) clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                if (gameOver) return;
+                timerSeconds--;
+                updateTimerDisplay();
+                if (timerSeconds <= 0) {
+                    endGame("Time Expired");
+                }
+            }, 1000);
+        }
+
+        function updateTimerDisplay() {
+            const m = Math.floor(timerSeconds / 60);
+            const s = timerSeconds % 60;
+            document.getElementById('timer').innerText = `${m}:${s.toString().padStart(2, '0')}`;
+        }
+
         function initBoard() {
+            gameOver = false;
+            timerRunning = false;
+            timerSeconds = 1200;
+            updateTimerDisplay();
+            document.getElementById('timer-label').innerText = "Waiting...";
+            if (timerInterval) clearInterval(timerInterval);
+
             boardState = Array(8).fill(null).map(() => Array(8).fill(null));
+            
+            // Available Damath chips values (randomized with negatives)
+            const getVal = () => {
+                const base = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+                const val = base[Math.floor(Math.random() * base.length)];
+                return Math.random() > 0.5 ? val : -val;
+            };
+
             const setup = [
-                { r: 0, c: 1, v: 10 }, { r: 0, c: 3, v: 8 }, { r: 0, c: 5, v: 6 }, { r: 0, c: 7, v: 4 },
-                { r: 1, c: 0, v: 5 }, { r: 1, c: 2, v: 7 }, { r: 1, c: 4, v: 9 }, { r: 1, c: 6, v: 11 },
-                { r: 2, c: 1, v: 3 }, { r: 2, c: 3, v: 1 }, { r: 2, c: 5, v: 0 }, { r: 2, c: 7, v: 2 },
-                { r: 5, c: 0, v: 2 }, { r: 5, c: 2, v: 0 }, { r: 5, c: 4, v: 1 }, { r: 5, c: 6, v: 3 },
-                { r: 6, c: 1, v: 11 }, { r: 6, c: 3, v: 9 }, { r: 6, c: 5, v: 7 }, { r: 6, c: 7, v: 5 },
-                { r: 7, c: 0, v: 4 }, { r: 7, c: 2, v: 6 }, { r: 7, c: 4, v: 8 }, { r: 7, c: 6, v: 10 }
+                { r: 0, c: 1 }, { r: 0, c: 3 }, { r: 0, c: 5 }, { r: 0, c: 7 },
+                { r: 1, c: 0 }, { r: 1, c: 2 }, { r: 1, c: 4 }, { r: 1, c: 6 },
+                { r: 2, c: 1 }, { r: 2, c: 3 }, { r: 2, c: 5 }, { r: 2, c: 7 },
+                { r: 5, c: 0 }, { r: 5, c: 2 }, { r: 5, c: 4 }, { r: 5, c: 6 },
+                { r: 6, c: 1 }, { r: 6, c: 3 }, { r: 6, c: 5 }, { r: 6, c: 7 },
+                { r: 7, c: 0 }, { r: 7, c: 2 }, { r: 7, c: 4 }, { r: 7, c: 6 }
             ];
+
             setup.forEach(p => {
-                boardState[p.r][p.c] = { val: p.v, player: p.r < 3 ? 2 : 1, isDama: false };
+                boardState[p.r][p.c] = { val: getVal(), player: p.r < 3 ? 2 : 1, isDama: false };
             });
             render();
         }
 
         async function tryConnectFirebase() {
             const statusText = document.getElementById('mp-status');
-            let config = null;
-            if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-                config = JSON.parse(__firebase_config);
-            } else {
-                config = MANUAL_FIREBASE_CONFIG;
-            }
+            let config = (typeof __firebase_config !== 'undefined' && __firebase_config) ? JSON.parse(__firebase_config) : MANUAL_FIREBASE_CONFIG;
 
             if (config && config.apiKey) {
                 try {
                     if (!firebase.apps.length) firebase.initializeApp(config);
                     auth = firebase.auth();
                     db = firebase.firestore();
-                    
-                    statusText.innerText = "Connecting to Test Database...";
-                    
-                    // Anonymous sign-in for multiplayer tracking
                     await auth.signInAnonymously();
-
                     auth.onAuthStateChanged((user) => {
                         if (user) {
                             isOnline = true;
-                            statusText.innerText = "Online - Test Mode Ready";
+                            statusText.innerText = "Online - Ready";
                             statusText.className = "text-[10px] font-bold uppercase tracking-widest text-green-500 mb-6 text-center";
                         }
                     });
                 } catch (e) {
-                    console.error("Firebase Error:", e);
-                    statusText.innerText = "Database Error. Check Console.";
+                    console.error("Firebase Connection Failed");
                 }
             }
         }
@@ -267,13 +322,23 @@
         function render() {
             const board = document.getElementById('board');
             board.innerHTML = '';
+            
+            const allForced = getForcedCaptures(currentPlayer);
+            const forcedPieces = allForced.map(m => `${m.fR},${m.fC}`);
+
             for (let r = 0; r < 8; r++) {
                 for (let c = 0; c < 8; c++) {
                     const cell = document.createElement('div');
                     const isDark = (r + c) % 2 !== 0;
                     cell.className = `cell ${isDark ? 'dark' : 'light'}`;
                     cell.innerText = operators[r][c];
-                    if (isDark) cell.onclick = () => handleCellClick(r, c);
+                    
+                    if (isDark && !gameOver) {
+                        if (forcedPieces.includes(`${r},${c}`) && !mustCaptureAgain) {
+                            cell.classList.add('forced-capture-hint');
+                        }
+                        cell.onclick = () => handleCellClick(r, c);
+                    }
 
                     const piece = boardState[r][c];
                     if (piece) {
@@ -285,7 +350,7 @@
                     }
                     if (validMoves.some(m => m.r === r && m.c === c)) {
                         const dot = document.createElement('div');
-                        dot.className = 'absolute w-3 h-3 rounded-full bg-yellow-400 opacity-80 animate-pulse';
+                        dot.className = 'absolute w-4 h-4 rounded-full bg-yellow-400 opacity-80 border-2 border-white';
                         cell.appendChild(dot);
                     }
                     board.appendChild(cell);
@@ -295,30 +360,49 @@
             document.getElementById('score2').innerText = scores[2];
             
             const ti = document.getElementById('turn-indicator');
-            const card1 = document.getElementById('card1');
-            const card2 = document.getElementById('card2');
-            
             ti.innerText = `${currentPlayer === 1 ? "Blue" : "Red"}'s Turn`;
             if (currentPlayer === 1) {
                 ti.className = "w-full bg-blue-500 text-white py-4 rounded-2xl font-black uppercase text-xs tracking-[0.2em]";
-                card1.classList.add('active');
-                card1.classList.add('border-blue-400');
-                card2.classList.remove('active');
+                document.getElementById('card1').classList.add('active', 'border-blue-400');
+                document.getElementById('card2').classList.remove('active', 'border-red-400');
             } else {
                 ti.className = "w-full bg-red-500 text-white py-4 rounded-2xl font-black uppercase text-xs tracking-[0.2em]";
-                card2.classList.add('active');
-                card2.classList.add('border-red-400');
-                card1.classList.remove('active');
+                document.getElementById('card2').classList.add('active', 'border-red-400');
+                document.getElementById('card1').classList.remove('active', 'border-blue-400');
             }
         }
 
+        function getForcedCaptures(player) {
+            const captures = [];
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    const piece = boardState[r][c];
+                    if (piece && piece.player === player) {
+                        const moves = calculateMoves(r, c, boardState);
+                        moves.filter(m => m.capture).forEach(m => captures.push({ ...m, fR: r, fC: c }));
+                    }
+                }
+            }
+            return captures;
+        }
+
         function handleCellClick(r, c) {
+            if (gameOver) return;
             if (matchId && myPlayerNum !== null && currentPlayer !== myPlayerNum) return;
             
             const piece = boardState[r][c];
             if (piece && piece.player === currentPlayer) {
+                if (mustCaptureAgain && (mustCaptureAgain.r !== r || mustCaptureAgain.c !== c)) return;
+
+                const allForced = getForcedCaptures(currentPlayer);
+                if (allForced.length > 0) {
+                    const hasCapture = calculateMoves(r, c, boardState).some(m => m.capture);
+                    if (!hasCapture) return;
+                }
+
                 selectedPiece = { r, c, ...piece };
                 validMoves = calculateMoves(r, c, boardState);
+                if (allForced.length > 0) validMoves = validMoves.filter(m => m.capture);
                 render();
             } else {
                 const move = validMoves.find(m => m.r === r && m.c === c);
@@ -328,67 +412,145 @@
 
         function calculateMoves(r, c, state) {
             const piece = state[r][c];
+            if (!piece) return [];
             const moves = [];
             const dirs = [[-1, -1], [-1, 1], [1, -1], [1, 1]];
-            const moveDirs = piece.isDama ? dirs : (piece.player === 1 ? [[-1, -1], [-1, 1]] : [[1, -1], [1, 1]]);
             
-            moveDirs.forEach(d => {
-                let nr = r + d[0], nc = c + d[1];
-                if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8 && !state[nr][nc]) moves.push({ r: nr, c: nc });
-            });
-
-            dirs.forEach(d => {
-                let nr = r + d[0], nc = c + d[1];
-                let jr = r + d[0] * 2, jc = c + d[1] * 2;
-                if (jr >= 0 && jr < 8 && jc >= 0 && jc < 8 && state[nr][nc] && state[nr][nc].player !== piece.player && !state[jr][jc]) {
-                    moves.push({ r: jr, c: jc, capture: { r: nr, c: nc } });
-                }
-            });
+            if (piece.isDama) {
+                dirs.forEach(d => {
+                    let nr = r + d[0], nc = c + d[1];
+                    let foundEnemy = false;
+                    let enemyPos = null;
+                    while (nr >= 0 && nr < 8 && nc >= 0 && nc < 8) {
+                        const target = state[nr][nc];
+                        if (!foundEnemy) {
+                            if (!target) moves.push({ r: nr, c: nc });
+                            else if (target.player !== piece.player) { foundEnemy = true; enemyPos = { r: nr, c: nc }; }
+                            else break;
+                        } else {
+                            if (!target) moves.push({ r: nr, c: nc, capture: enemyPos });
+                            else break;
+                        }
+                        nr += d[0]; nc += d[1];
+                    }
+                });
+            } else {
+                const moveDirs = piece.player === 1 ? [[-1, -1], [-1, 1]] : [[1, -1], [1, 1]];
+                moveDirs.forEach(d => {
+                    let nr = r + d[0], nc = c + d[1];
+                    if (nr >= 0 && nr < 8 && nc >= 0 && nc < 8 && !state[nr][nc]) moves.push({ r: nr, c: nc });
+                });
+                dirs.forEach(d => {
+                    let nr = r + d[0], nc = c + d[1];
+                    let jr = r + d[0] * 2, jc = c + d[1] * 2;
+                    if (jr >= 0 && jr < 8 && jc >= 0 && jc < 8 && state[nr][nc] && state[nr][nc].player !== piece.player && !state[jr][jc]) {
+                        moves.push({ r: jr, c: jc, capture: { r: nr, c: nc } });
+                    }
+                });
+            }
             return moves;
         }
 
         function executeMove(fR, fC, tR, tC, capture) {
+            // Start timer on first move
+            if (!timerRunning) startTimer();
+
             const piece = boardState[fR][fC];
             if (capture) {
-                const target = boardState[capture.r][capture.c];
+                const capturedPiece = boardState[capture.r][capture.c];
                 const op = operators[tR][tC];
                 let points = 0;
-                if (op === '+') points = piece.val + target.val;
-                else if (op === '-') points = Math.abs(piece.val - target.val);
-                else if (op === 'x') points = piece.val * target.val;
-                else if (op === '÷') points = target.val !== 0 ? Math.floor(piece.val / target.val) : 0;
+                if (op === '+') points = piece.val + capturedPiece.val;
+                else if (op === '-') points = piece.val - capturedPiece.val;
+                else if (op === 'x') points = piece.val * capturedPiece.val;
+                else if (op === '÷') points = capturedPiece.val !== 0 ? Math.floor(piece.val / capturedPiece.val) : 0;
+                
                 scores[currentPlayer] += points * (piece.isDama ? 2 : 1);
                 boardState[capture.r][capture.c] = null;
             }
+
             boardState[tR][tC] = piece;
             boardState[fR][fC] = null;
-            if (!piece.isDama && ((currentPlayer === 1 && tR === 0) || (currentPlayer === 2 && tR === 7))) piece.isDama = true;
-            
+
+            if (!piece.isDama && ((currentPlayer === 1 && tR === 0) || (currentPlayer === 2 && tR === 7))) {
+                piece.isDama = true;
+            }
+
+            if (capture) {
+                const nextMoves = calculateMoves(tR, tC, boardState).filter(m => m.capture);
+                if (nextMoves.length > 0) {
+                    mustCaptureAgain = { r: tR, c: tC };
+                    selectedPiece = { r: tR, c: tC, ...piece };
+                    validMoves = nextMoves;
+                    if (matchId && db) syncOnline();
+                    render();
+                    return;
+                }
+            }
+
+            mustCaptureAgain = null;
             currentPlayer = currentPlayer === 1 ? 2 : 1;
             selectedPiece = null;
             validMoves = [];
+            
+            checkWinConditions();
             if (matchId && db) syncOnline();
             render();
         }
 
+        function checkWinConditions() {
+            let p1Pieces = 0, p2Pieces = 0;
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    if (boardState[r][c]?.player === 1) p1Pieces++;
+                    if (boardState[r][c]?.player === 2) p2Pieces++;
+                }
+            }
+            if (p1Pieces === 0 || p2Pieces === 0) {
+                endGame(p1Pieces === 0 ? "Red cleared the board!" : "Blue cleared the board!");
+            }
+        }
+
+        function endGame(reason) {
+            gameOver = true;
+            if (timerInterval) clearInterval(timerInterval);
+            
+            const winner = scores[1] > scores[2] ? 1 : (scores[2] > scores[1] ? 2 : 0);
+            const modal = document.getElementById('winner-modal');
+            const title = document.getElementById('winner-title');
+            const icon = document.getElementById('winner-icon');
+            
+            document.getElementById('final-score-1').innerText = scores[1];
+            document.getElementById('final-score-2').innerText = scores[2];
+            
+            if (winner === 1) { title.innerText = "Blue Player Wins!"; icon.innerText = "💙🏆"; }
+            else if (winner === 2) { title.innerText = "Red Player Wins!"; icon.innerText = "❤️🏆"; }
+            else { title.innerText = "It's a Draw!"; icon.innerText = "🤝"; }
+            
+            document.getElementById('winner-reason').innerText = reason;
+            modal.style.display = 'flex';
+        }
+
         async function syncOnline() {
-            if (!db || !auth.currentUser) return;
+            if (!db || !auth.currentUser || !matchId) return;
             const ref = db.doc(`artifacts/${appId}/public/data/matches/${matchId}`);
             await ref.update({
                 board: JSON.stringify(boardState),
                 scores,
                 currentPlayer,
+                timerSeconds,
+                timerRunning,
+                gameOver,
                 lastUpdate: firebase.firestore.FieldValue.serverTimestamp()
             });
         }
 
         window.hostGame = async function() {
-            if (!isOnline) return alert("Connecting...");
+            if (!isOnline) return;
             const code = Math.random().toString(36).substring(2, 8).toUpperCase();
             document.getElementById('mp-initial').classList.add('hidden');
             document.getElementById('mp-waiting').classList.remove('hidden');
             document.getElementById('display-code').innerText = code;
-            
             try {
                 initBoard();
                 scores = { 1: 0, 2: 0 };
@@ -397,44 +559,28 @@
                     board: JSON.stringify(boardState), 
                     scores, 
                     currentPlayer, 
+                    timerSeconds: 1200,
+                    timerRunning: false,
                     status: 'waiting',
                     createdAt: firebase.firestore.FieldValue.serverTimestamp()
                 });
-                matchId = code; 
-                myPlayerNum = 1;
+                matchId = code; myPlayerNum = 1;
                 listenToMatch(code);
-            } catch (err) {
-                console.error(err);
-                cancelMultiplayer();
-            }
+            } catch (err) { cancelMultiplayer(); }
         };
 
         window.joinGame = async function() {
-            if (!isOnline) return alert("Connecting to database...");
-            const codeInput = document.getElementById('join-code');
-            const code = codeInput.value.trim().toUpperCase();
-            if (code.length !== 6) return alert("Please enter a valid 6-digit code.");
-            
+            if (!isOnline) return;
+            const code = document.getElementById('join-code').value.trim().toUpperCase();
+            if (code.length !== 6) return;
             const ref = db.doc(`artifacts/${appId}/public/data/matches/${code}`);
             try {
                 const snap = await ref.get();
-                if (!snap.exists()) {
-                    return alert("Match code not found. Please double check the code.");
-                }
-                
-                // Use set with merge to ensure we don't hit "Update" vs "Overwrite" issues in Test Mode
-                await ref.set({ 
-                    status: 'active',
-                    lastJoined: firebase.firestore.FieldValue.serverTimestamp()
-                }, { merge: true });
-                
-                matchId = code; 
-                myPlayerNum = 2;
+                if (!snap.exists) return alert("Code not found");
+                await ref.set({ status: 'active', lastJoined: firebase.firestore.FieldValue.serverTimestamp() }, { merge: true });
+                matchId = code; myPlayerNum = 2;
                 listenToMatch(code);
-            } catch (err) { 
-                console.error("Join Error Details:", err);
-                alert(`Error joining: ${err.message || "Unknown error"}. Please ensure you are connected to the internet.`); 
-            }
+            } catch (err) { alert("Join failed"); }
         };
 
         function listenToMatch(code) {
@@ -442,45 +588,30 @@
             unsubscribeMatch = db.doc(`artifacts/${appId}/public/data/matches/${code}`).onSnapshot(doc => {
                 const data = doc.data();
                 if (!data) return;
-                
-                if (data.status === 'active') {
-                    closeModal();
-                    document.getElementById('match-status-text').innerText = `LIVE MATCH: ${matchId}`;
-                    document.getElementById('find-online-btn').disabled = true;
-                }
-                
-                // Only update our local state if it's the other player's turn or the game just started
-                if (data.currentPlayer !== myPlayerNum || data.status === 'active') {
+                if (data.status === 'active') { closeModal(); document.getElementById('find-online-btn').disabled = true; }
+                if (data.gameOver && !gameOver) { scores = data.scores; endGame("Game Ended Online"); }
+                if (data.timerRunning && !timerRunning) startTimer();
+                if (data.currentPlayer !== myPlayerNum) {
                     boardState = JSON.parse(data.board);
                     scores = data.scores;
                     currentPlayer = data.currentPlayer;
+                    timerSeconds = data.timerSeconds;
+                    updateTimerDisplay();
                     render();
                 }
-            }, (err) => {
-                console.error("Match Listener Error:", err);
             });
         }
 
         function resetLocalGame() {
             if (unsubscribeMatch) unsubscribeMatch();
-            matchId = null;
-            myPlayerNum = null;
-            currentPlayer = 1;
-            scores = { 1: 0, 2: 0 };
-            document.getElementById('match-status-text').innerText = "Offline mode active.";
+            matchId = null; myPlayerNum = null;
             document.getElementById('find-online-btn').disabled = false;
             initBoard();
         }
 
         window.openMultiplayerModal = () => document.getElementById('multiplayer-modal').style.display = 'flex';
         window.closeModal = () => document.getElementById('multiplayer-modal').style.display = 'none';
-        window.cancelMultiplayer = () => { 
-            if(unsubscribeMatch) unsubscribeMatch(); 
-            matchId = null; 
-            document.getElementById('mp-initial').classList.remove('hidden');
-            document.getElementById('mp-waiting').classList.add('hidden');
-            closeModal(); 
-        };
+        window.cancelMultiplayer = () => { if(unsubscribeMatch) unsubscribeMatch(); matchId = null; closeModal(); };
     </script>
 </body>
 </html>
