@@ -171,6 +171,23 @@
     </div>
 
     <script>
+        /**
+         * GITHUB DEPLOYMENT INSTRUCTIONS:
+         * 1. Go to console.firebase.google.com
+         * 2. Create a project and add a "Web App"
+         * 3. Copy the 'firebaseConfig' object and paste it below.
+         * 4. Enable "Anonymous Sign-in" in Authentication.
+         * 5. Enable "Cloud Firestore" and set rules to allow read/write.
+         */
+        const MANUAL_FIREBASE_CONFIG = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT_ID.appspot.com",
+            messagingSenderId: "YOUR_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
         // Global State
         let db, auth, appId = typeof __app_id !== 'undefined' ? __app_id : 'tournament-damath-v1';
         let boardState = [];
@@ -217,9 +234,17 @@
 
         async function tryConnectFirebase() {
             const statusText = document.getElementById('mp-status');
+            
+            // Check for injected config first, then manual config
+            let config = null;
             if (typeof __firebase_config !== 'undefined' && __firebase_config) {
+                config = JSON.parse(__firebase_config);
+            } else if (MANUAL_FIREBASE_CONFIG.apiKey !== "YOUR_API_KEY") {
+                config = MANUAL_FIREBASE_CONFIG;
+            }
+
+            if (config) {
                 try {
-                    const config = JSON.parse(__firebase_config);
                     if (!firebase.apps.length) firebase.initializeApp(config);
                     auth = firebase.auth();
                     db = firebase.firestore();
@@ -239,10 +264,11 @@
                         }
                     });
                 } catch (e) {
-                    statusText.innerText = "Offline Mode - Config Missing";
+                    console.error("Firebase Error:", e);
+                    statusText.innerText = "Connection Failed - Check Console";
                 }
             } else {
-                statusText.innerText = "Waiting for Cloud Config...";
+                statusText.innerText = "Offline Mode - Configuration Missing";
             }
         }
 
